@@ -132,7 +132,7 @@ opspulse-ai/
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-org/opspulse-ai.git
+git clone https://github.com/SumedhPatil1507/opspulse-ai.git
 cd opspulse-ai
 python -m venv .venv
 # Windows
@@ -140,7 +140,11 @@ python -m venv .venv
 # macOS/Linux
 source .venv/bin/activate
 
+# Dashboard only (fast, Streamlit Cloud compatible)
 pip install -r requirements.txt
+
+# Full project (FastAPI + Celery + RAG + LangGraph + Docker sandbox)
+pip install -r requirements-full.txt
 ```
 
 ### 2. Configure environment
@@ -216,9 +220,16 @@ Expected response:
 
 ## 📈 Streamlit Dashboard
 
+[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://opspulse-ai-g6vhw4n7kc6hjf9zjnrm48.streamlit.app)
+
 ```bash
-streamlit run dashboard.py
+# Local
+streamlit run streamlit_app.py
 ```
+
+Deploys to **https://opspulse-ai-g6vhw4n7kc6hjf9zjnrm48.streamlit.app**
+
+> Entry-point for Streamlit Cloud is `streamlit_app.py` on the `main` branch.
 
 Opens at **http://localhost:8501**
 

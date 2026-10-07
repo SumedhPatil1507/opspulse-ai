@@ -33,8 +33,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        "Get Help": "https://github.com/your-org/opspulse-ai",
-        "Report a bug": "https://github.com/your-org/opspulse-ai/issues",
+        "Get Help": "https://github.com/sanjeevrpatil11-gif/opspulse-ai",
+        "Report a bug": "https://github.com/sanjeevrpatil11-gif/opspulse-ai/issues",
         "About": "OpsPulse AI — Autonomous Incident Remediation Platform",
     },
 )

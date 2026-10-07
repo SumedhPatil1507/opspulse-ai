@@ -12,10 +12,13 @@
 [![Docker](https://img.shields.io/badge/Docker-SDK-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
 [![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)](https://prometheus.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-sanjeevrpatil11--gif-181717?style=for-the-badge&logo=github)](https://github.com/sanjeevrpatil11-gif/opspulse-ai)
 
 **OpsPulse AI** is a production-grade, agentic incident response system that ingests alert payloads, retrieves relevant runbooks via hybrid RAG, plans remediations with LLMs, and executes safe container operations — all with human-in-the-loop approval for high-risk actions.
 
 [**Live Dashboard**](#-streamlit-dashboard) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**API Docs**](#-api-reference)
+
+> 📦 **Repository:** https://github.com/sanjeevrpatil11-gif/opspulse-ai
 
 </div>
 

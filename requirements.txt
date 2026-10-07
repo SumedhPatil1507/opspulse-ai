@@ -5,8 +5,9 @@
 # requirements-full.txt for local development.
 # =============================================================================
 
-streamlit==1.39.0
-plotly==5.24.1
-pandas==2.2.3
-numpy==1.26.4
-requests==2.32.3
+streamlit>=1.38.0,<2.0.0
+plotly>=5.20.0
+pandas>=2.1.0
+numpy>=1.26.0,<3.0.0
+requests>=2.31.0
+

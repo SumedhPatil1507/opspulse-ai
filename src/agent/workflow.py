@@ -57,6 +57,7 @@ from langgraph.graph import END, START, StateGraph
 from src.agent.nodes import (
     auto_execute_node,
     await_approval_node,
+    execute_action_node,
     hitl_check_node,
     parse_log_node,
     plan_remediation_node,
@@ -164,6 +165,49 @@ def _route_after_hitl(
     return NodeName.AWAIT_APPROVAL.value
 
 
+def _route_after_await(
+    state: IncidentState,
+) -> Literal["execute_action", "__end__"]:
+    """
+    After AwaitApprovalNode: the high-risk branch has already posted the
+    Slack Block Kit webhook.  Execution proceeds **only** when both are true:
+
+    1. ``approval_status == APPROVED`` (human clicked Approve), and
+    2. ``auth_token`` carries a JWT for ``src/k8s_executor.py`` to verify.
+
+    Otherwise the graph ends and waits for an external re-invocation with
+    the approval + token attached (fail-safe hold — no JWT, no execution).
+    """
+    approval = state.get("approval_status")
+    auth_token = state.get("auth_token")
+
+    if approval == ApprovalStatus.APPROVED and auth_token:
+        logger.info(
+            "[router] await_approval → execute_action (approval=APPROVED, jwt=present)"
+        )
+        return NodeName.EXECUTE_ACTION.value
+
+    logger.info(
+        "[router] await_approval → END (approval=%s, jwt=%s) — holding for JWT authorization",
+        approval,
+        "present" if auth_token else "absent",
+    )
+    return END
+
+
+def _route_after_auto(
+    state: IncidentState,
+) -> Literal["execute_action", "__end__"]:
+    """
+    After AutoExecuteNode: dispatch only when a JWT is attached; otherwise
+    the node already flagged ``AWAITING_HUMAN`` and we hold at END.
+    """
+    if state.get("workflow_status") == WorkflowStatus.AWAITING_HUMAN:
+        logger.info("[router] auto_execute → END (awaiting JWT authorization)")
+        return END
+    return NodeName.EXECUTE_ACTION.value
+
+
 # ---------------------------------------------------------------------------
 # Graph factory
 # ---------------------------------------------------------------------------
@@ -194,6 +238,7 @@ def build_workflow(settings=None):
     graph.add_node(NodeName.HITL_CHECK.value, hitl_check_node)
     graph.add_node(NodeName.AUTO_EXECUTE.value, auto_execute_node)
     graph.add_node(NodeName.AWAIT_APPROVAL.value, await_approval_node)
+    graph.add_node(NodeName.EXECUTE_ACTION.value, execute_action_node)
 
     # ── Entry edge ─────────────────────────────────────────────────────────
     graph.add_edge(START, NodeName.PARSE_LOG.value)
@@ -237,8 +282,28 @@ def build_workflow(settings=None):
     )
 
     # ── Terminal edges ─────────────────────────────────────────────────────
-    graph.add_edge(NodeName.AUTO_EXECUTE.value, END)
-    graph.add_edge(NodeName.AWAIT_APPROVAL.value, END)
+    # High-risk branch: Slack Block Kit posted → await JWT authorization →
+    # only then may execution reach src/k8s_executor.py.
+    graph.add_conditional_edges(
+        NodeName.AWAIT_APPROVAL.value,
+        _route_after_await,
+        {
+            NodeName.EXECUTE_ACTION.value: NodeName.EXECUTE_ACTION.value,
+            END: END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        NodeName.AUTO_EXECUTE.value,
+        _route_after_auto,
+        {
+            NodeName.EXECUTE_ACTION.value: NodeName.EXECUTE_ACTION.value,
+            END: END,
+        },
+    )
+
+    # ExecuteActionNode is the single, JWT-gated exit to the cluster.
+    graph.add_edge(NodeName.EXECUTE_ACTION.value, END)
 
     # ── Compile ────────────────────────────────────────────────────────────
     compiled = graph.compile()

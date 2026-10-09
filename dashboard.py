@@ -13,9 +13,11 @@ Metrics are sourced from:
 
 from __future__ import annotations
 
+import json
 import random
 import time
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -111,7 +113,7 @@ with st.sidebar:
 
     metrics_url = st.text_input(
         "Prometheus /metrics URL",
-        value="http://localhost:8000/metrics",
+        value="http://localhost:8000/metrics/",
         help="FastAPI app must be running. Falls back to simulated data.",
     )
     auto_refresh = st.toggle("Auto-refresh", value=True)
@@ -137,6 +139,86 @@ with st.sidebar:
     st.markdown("---")
     st.caption("🔥 OpsPulse AI v0.1.0")
     st.caption("Built with LangGraph · Qdrant · Groq")
+
+    st.markdown("---")
+    st.markdown("### 📁 File Upload")
+    st.markdown("Upload incident data or runbooks to integrate with the system.")
+    
+    upload_type = st.radio("Upload Type", ["Incident Data (JSON)", "Runbook (Markdown)"])
+    
+    if upload_type == "Incident Data (JSON)":
+        uploaded_file = st.file_uploader(
+            "Upload incident data (JSON)",
+            type=["json"],
+            help="Upload a JSON file containing incident data to ingest into the system."
+        )
+        
+        if uploaded_file is not None:
+            try:
+                data = json.load(uploaded_file)
+                st.success(f"✅ Successfully loaded {len(data) if isinstance(data, list) else 1} incidents")
+                with st.expander("View Incident Data"):
+                    st.json(data)
+                
+                if st.button("🚀 Ingest to FastAPI", type="primary"):
+                    # Use batch ingest endpoint
+                    api_url = metrics_url.replace("/metrics", "/api/v1/alerts/ingest/batch")
+                    
+                    with st.spinner("Ingesting incidents..."):
+                        try:
+                            # Re-upload the file
+                            uploaded_file.seek(0)
+                            files = {"file": (uploaded_file.name, uploaded_file, "application/json")}
+                            response = requests.post(api_url, files=files, timeout=10)
+                            
+                            if response.status_code == 202:
+                                result = response.json()
+                                st.success(f"✅ Successfully ingested {result['successful']}/{result['total']} incidents")
+                                if result['failed'] > 0:
+                                    st.warning(f"⚠️ {result['failed']} incidents failed to ingest")
+                                    with st.expander("View Failed Ingestions"):
+                                        st.json(result['details']['failed'])
+                            else:
+                                st.error(f"❌ Failed to ingest: {response.text}")
+                        except Exception as e:
+                            st.error(f"❌ Error during ingestion: {e}")
+            except Exception as e:
+                st.error(f"❌ Error parsing JSON file: {e}")
+    
+    else:  # Runbook upload
+        uploaded_file = st.file_uploader(
+            "Upload runbook (Markdown)",
+            type=["md", "markdown"],
+            help="Upload a Markdown runbook to add to the knowledge base."
+        )
+        
+        if uploaded_file is not None:
+            try:
+                content = uploaded_file.read().decode("utf-8")
+                st.success(f"✅ Successfully loaded runbook: {uploaded_file.name}")
+                with st.expander("View Runbook Content"):
+                    st.markdown(content)
+                
+                if st.button("📤 Upload to FastAPI", type="primary"):
+                    api_url = metrics_url.replace("/metrics", "/api/v1/runbooks/upload")
+                    
+                    with st.spinner("Uploading runbook..."):
+                        try:
+                            # Re-upload the file
+                            uploaded_file.seek(0)
+                            files = {"file": (uploaded_file.name, uploaded_file, "text/markdown")}
+                            response = requests.post(api_url, files=files, timeout=10)
+                            
+                            if response.status_code == 201:
+                                result = response.json()
+                                st.success(f"✅ Runbook uploaded successfully to {result['path']}")
+                                st.info("📝 Runbook will be indexed automatically on next restart")
+                            else:
+                                st.error(f"❌ Failed to upload: {response.text}")
+                        except Exception as e:
+                            st.error(f"❌ Error during upload: {e}")
+            except Exception as e:
+                st.error(f"❌ Error processing file: {e}")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Data layer — live Prometheus or simulated fallback
@@ -165,6 +247,70 @@ def parse_prometheus_counter(text: str, metric_name: str) -> float:
                 except ValueError:
                     pass
     return total
+
+
+def parse_prometheus_histogram(text: str, metric_name: str) -> dict:
+    """Extract histogram metrics including count, sum, and bucket values."""
+    result = {"count": 0.0, "sum": 0.0, "buckets": {}}
+    for line in text.splitlines():
+        if line.startswith(metric_name + "_bucket{"):
+            # Parse bucket: metric_bucket{le="0.1"}=5
+            try:
+                # Extract le value and count
+                brace_end = line.index("}")
+                label_part = line[len(metric_name) + 1:brace_end]
+                value_part = line[brace_end + 2:].strip()
+                
+                # Extract le label
+                if 'le="' in label_part:
+                    le_start = label_part.index('le="') + 4
+                    le_end = label_part.index('"', le_start)
+                    le_value = label_part[le_start:le_end]
+                    result["buckets"][le_value] = float(value_part)
+            except (ValueError, IndexError):
+                pass
+        elif line.startswith(metric_name + "_sum "):
+            try:
+                result["sum"] = float(line.split()[-1])
+            except ValueError:
+                pass
+        elif line.startswith(metric_name + "_count "):
+            try:
+                result["count"] = float(line.split()[-1])
+            except ValueError:
+                pass
+    return result
+
+
+def parse_all_metrics(text: str) -> dict:
+    """Parse all available Prometheus metrics into a structured dict."""
+    metrics = {}
+    
+    # Counters
+    counter_names = [
+        "opspulse_incidents_auto_resolved_total",
+        "opspulse_hitl_approvals_total",
+        "opspulse_sandbox_operations_total",
+        "opspulse_runbook_retrievals_total",
+        "opspulse_llm_calls_total",
+    ]
+    
+    for name in counter_names:
+        if name in text:
+            metrics[name] = parse_prometheus_counter(text, name)
+    
+    # Histograms
+    histogram_names = [
+        "opspulse_agent_execution_latency_seconds",
+        "opspulse_sandbox_operation_latency_seconds",
+        "opspulse_llm_call_latency_seconds",
+    ]
+    
+    for name in histogram_names:
+        if name in text:
+            metrics[name] = parse_prometheus_histogram(text, name)
+    
+    return metrics
 
 
 @st.cache_data(ttl=refresh_interval)
@@ -283,12 +429,22 @@ kpis: dict = data["kpis"]
 
 # Override KPIs from live Prometheus when available
 if live_mode:
-    auto_r = parse_prometheus_counter(raw_prom, "opspulse_incidents_auto_resolved_total")
-    hitl_a = parse_prometheus_counter(raw_prom, "opspulse_hitl_approvals_total")
-    if auto_r > 0:
-        kpis["auto_resolved"] = int(auto_r)
-    if hitl_a > 0:
-        kpis["hitl_approved"] = int(hitl_a)
+    all_metrics = parse_all_metrics(raw_prom)
+    
+    # Update KPIs with live metrics
+    if "opspulse_incidents_auto_resolved_total" in all_metrics:
+        kpis["auto_resolved"] = int(all_metrics["opspulse_incidents_auto_resolved_total"])
+    
+    if "opspulse_hitl_approvals_total" in all_metrics:
+        kpis["hitl_approved"] = int(all_metrics["opspulse_hitl_approvals_total"])
+    
+    if "opspulse_agent_execution_latency_seconds" in all_metrics:
+        hist = all_metrics["opspulse_agent_execution_latency_seconds"]
+        if hist["count"] > 0:
+            kpis["avg_latency"] = round(hist["sum"] / hist["count"], 2)
+    
+    if "opspulse_llm_calls_total" in all_metrics:
+        kpis["llm_calls"] = int(all_metrics["opspulse_llm_calls_total"])
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Header

@@ -815,38 +815,59 @@ def hitl_check_node(state: IncidentState) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Terminal nodes
+# Terminal / dispatch nodes
 # ---------------------------------------------------------------------------
 
 def auto_execute_node(state: IncidentState) -> dict[str, Any]:
     """
-    Placeholder execution node for LOW / MEDIUM risk actions.
+    Decision node for LOW / MEDIUM risk actions (or pre-approved actions).
 
-    In production: replace the stub with actual tool dispatch logic
-    (kubectl calls, Redis flushes, PagerDuty API, etc.).
+    It performs **no dispatch itself** — execution is always funnelled
+    through ``execute_action_node``, which enforces the JWT gate before
+    anything reaches ``src/k8s_executor.py``.  This node records intent and
+    holds the workflow when no authorization token is attached.
     """
     t_start = time.monotonic()
     node = NodeName.AUTO_EXECUTE
     proposed = state.get("proposed_action", {}) or {}
+    auth_token = state.get("auth_token")
 
     logger.info(
-        "[%s] AUTO-EXECUTING tool=%s params=%s",
+        "[%s] ACTION INTENT tool=%s params=%s auth_token_present=%s",
         node.value,
         proposed.get("tool_name"),
         proposed.get("tool_parameters"),
+        bool(auth_token),
     )
+
+    if not auth_token:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        hold_msg = (
+            "No JWT authorization token attached — execution held. "
+            "Re-invoke the workflow with state['auth_token'] set to a JWT "
+            "signed with ROLE_SRE_ADMIN to dispatch this action."
+        )
+        logger.warning("[%s] %s", node.value, hold_msg)
+        return {
+            "workflow_status": WorkflowStatus.AWAITING_HUMAN,
+            "error_message": hold_msg,
+            "trace_log": [make_trace_event(
+                node=node, event="awaiting_jwt",
+                message=hold_msg, duration_ms=duration_ms,
+                metadata={"tool_name": proposed.get("tool_name")},
+            )],
+        }
 
     duration_ms = (time.monotonic() - t_start) * 1000
     return {
-        "workflow_status": WorkflowStatus.COMPLETED,
+        "workflow_status": WorkflowStatus.RUNNING,
         "trace_log": [make_trace_event(
             node=node, event="node_end",
-            message=f"Auto-executed tool={proposed.get('tool_name')} "
-                    f"[STUB — replace with real dispatch]",
+            message=f"Authorization token present — routing to execute_action "
+                    f"for tool={proposed.get('tool_name')}",
             duration_ms=duration_ms,
             metadata={
                 "tool_name": proposed.get("tool_name"),
-                "tool_parameters": proposed.get("tool_parameters"),
                 "action_id": proposed.get("action_id"),
             },
         )],
@@ -881,3 +902,295 @@ def await_approval_node(state: IncidentState) -> dict[str, Any]:
             },
         )],
     }
+
+
+# ---------------------------------------------------------------------------
+# JWT-gated Kubernetes execution node
+# ---------------------------------------------------------------------------
+
+# tool_name (as emitted by PlanRemediationNode) → executor operation
+_K8S_TOOL_MAP: dict[str, str] = {
+    "restart_deployment": "restart_deployment",
+    "rolling_restart": "restart_deployment",
+    "restart": "restart_deployment",
+    "scale_deployment": "scale_deployment",
+    "scale_replicas": "scale_deployment",
+    "scale": "scale_deployment",
+    "rollback_helm_release": "rollback_helm_release",
+    "helm_rollback": "rollback_helm_release",
+    "rollback": "rollback_helm_release",
+    "fetch_pod_logs": "fetch_pod_logs",
+}
+
+
+def _dataclass_to_dict(obj: Any) -> Any:
+    """Recursively convert dataclasses (e.g. K8sActionResult) to plain dicts."""
+    if hasattr(obj, "__dataclass_fields__"):
+        return {k: _dataclass_to_dict(getattr(obj, k)) for k in obj.__dataclass_fields__}
+    if isinstance(obj, dict):
+        return {k: _dataclass_to_dict(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_dataclass_to_dict(v) for v in obj]
+    return obj
+
+
+def execute_action_node(state: IncidentState) -> dict[str, Any]:
+    """
+    JWT-gated dispatch node — the **only** place in the graph that invokes
+    ``src/k8s_executor.py``.
+
+    Safety contract
+    ---------------
+    1. ``auth_token`` must be present; the JWT is verified cryptographically
+       (signature + ``exp`` + ``ROLE_SRE_ADMIN`` claim) *before* any call
+       reaches the Kubernetes API.
+    2. Mutating operations additionally consume an approved HITL
+       ``approval_id`` inside the executor (dual gate, anti-replay).
+    3. Any authorization failure fails **safe**: no cluster call is made,
+       the failure is recorded in ``execution_result``/``error_message``,
+       and the workflow ends with ``WorkflowStatus.FAILED``.
+    4. ``fetch_pod_logs`` is read-only but still requires a valid
+       ``ROLE_SRE_ADMIN`` JWT.
+    """
+    t_start = time.monotonic()
+    node = NodeName.EXECUTE_ACTION
+    proposed = state.get("proposed_action", {}) or {}
+    auth_token = state.get("auth_token")
+    tool_name = str(proposed.get("tool_name") or "")
+    params = proposed.get("tool_parameters") or {}
+    action_id = proposed.get("action_id")
+
+    traces: list[TraceEvent] = [make_trace_event(
+        node=node, event="node_start",
+        message=f"Execute gate entered for tool={tool_name}",
+        metadata={"tool_name": tool_name, "action_id": action_id},
+    )]
+
+    # ── Gate 1: JWT must be present ─────────────────────────────────────────
+    if not auth_token:
+        err = (
+            "SecurityGateError: JWT authorization token missing — "
+            "Kubernetes execution denied."
+        )
+        logger.error("[%s] %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="auth_failed", message=err,
+            duration_ms=(time.monotonic() - t_start) * 1000,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err},
+            "trace_log": traces,
+        }
+
+    # ── Resolve target operation ───────────────────────────────────────────
+    operation = _K8S_TOOL_MAP.get(tool_name.strip().lower())
+    if operation is None:
+        # Not a Kubernetes operation (e.g. advisory/manual recommendation).
+        duration_ms = (time.monotonic() - t_start) * 1000
+        msg = (
+            f"Tool '{tool_name}' is not a Kubernetes executor operation — "
+            "no dispatch required; recommendation delivered to operator."
+        )
+        logger.info("[%s] %s", node.value, msg)
+        traces.append(make_trace_event(
+            node=node, event="node_end", message=msg, duration_ms=duration_ms,
+            metadata={"tool_name": tool_name},
+        ))
+        return {
+            "workflow_status": WorkflowStatus.COMPLETED,
+            "execution_result": {
+                "success": True,
+                "action": tool_name,
+                "dispatched": False,
+                "reason": "non_k8s_tool",
+            },
+            "trace_log": traces,
+        }
+
+    # ── Import executor lazily (keeps API startup fast) ────────────────────
+    from src.k8s_executor import (
+        HITLApprovalRequiredError,
+        K8sActionResult,
+        K8sExecutionError,
+        SecurityGateError,
+        get_hitl_queue,
+        get_k8s_executor,
+        verify_jwt_token,
+    )
+
+    # ── Gate 2: cryptographically verify JWT (signature/exp/role) ──────────
+    try:
+        claims = verify_jwt_token(auth_token)
+        traces.append(make_trace_event(
+            node=node, event="jwt_verified",
+            message=f"JWT verified for subject={claims.get('sub')}",
+            metadata={"sub": claims.get("sub"), "roles": claims.get("roles")},
+        ))
+    except SecurityGateError as exc:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        err = f"SecurityGateError: {exc}"
+        logger.error("[%s] %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="auth_failed", message=err, duration_ms=duration_ms,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err},
+            "trace_log": traces,
+        }
+
+    executor = get_k8s_executor()
+
+    # ── Gate 3 (mutating ops): an approved HITL approval_id is mandatory ───
+    needs_approval = operation != "fetch_pod_logs"
+    approval_id = str(params.get("approval_id") or "")
+    if needs_approval and not approval_id:
+        # Fail closed: submit a review item but never invent an approval.
+        queue = get_hitl_queue()
+        target = str(
+            params.get("target")
+            or f"{params.get('namespace', 'default')}/"
+               f"{params.get('deployment_name') or params.get('release_name') or 'unknown'}"
+        )
+        request = queue.submit_for_review(
+            action_type=operation,
+            target=target,
+            params=dict(params),
+        )
+        approval_id = request.approval_id
+        err = (
+            f"HITLApprovalRequiredError: no approval_id supplied — submitted "
+            f"{approval_id} for review; re-invoke with "
+            f"tool_parameters['approval_id'] after human approval."
+        )
+        logger.warning("[%s] %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="awaiting_approval", message=err,
+            duration_ms=(time.monotonic() - t_start) * 1000,
+            metadata={"approval_id": approval_id},
+        ))
+        return {
+            "workflow_status": WorkflowStatus.AWAITING_HUMAN,
+            "approval_status": ApprovalStatus.PENDING,
+            "error_message": err,
+            "execution_result": {
+                "success": False,
+                "error": "approval_required",
+                "approval_id": approval_id,
+            },
+            "trace_log": traces,
+        }
+
+    # ── Dispatch through src/k8s_executor.py ───────────────────────────────
+    namespace = str(params.get("namespace") or "default")
+    try:
+        if operation == "restart_deployment":
+            result = executor.restart_deployment(
+                namespace=namespace,
+                deployment_name=str(
+                    params.get("deployment_name") or params.get("target") or ""
+                ),
+                approval_id=approval_id,
+                auth_token=auth_token,
+            )
+        elif operation == "scale_deployment":
+            result = executor.scale_deployment(
+                namespace=namespace,
+                deployment_name=str(
+                    params.get("deployment_name") or params.get("target") or ""
+                ),
+                count=int(params.get("replicas") or params.get("count") or 1),
+                approval_id=approval_id,
+                auth_token=auth_token,
+            )
+        elif operation == "rollback_helm_release":
+            revision = params.get("revision")
+            result = executor.rollback_helm_release(
+                release_name=str(
+                    params.get("release_name") or params.get("target") or ""
+                ),
+                namespace=namespace if namespace != "default" else None,
+                revision=int(revision) if revision is not None else None,
+                approval_id=approval_id,
+                auth_token=auth_token,
+            )
+        else:  # operation == "fetch_pod_logs"
+            result = executor.fetch_pod_logs(
+                namespace=namespace,
+                pod_name=str(params.get("pod_name") or params.get("target") or ""),
+                tail_lines=int(params.get("tail_lines") or 200),
+                auth_token=auth_token,
+            )
+
+    except (SecurityGateError, HITLApprovalRequiredError) as exc:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        err = f"{exc.__class__.__name__}: {exc}"
+        logger.error("[%s] Execution denied: %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="auth_failed", message=err, duration_ms=duration_ms,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err},
+            "trace_log": traces,
+        }
+    except K8sExecutionError as exc:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        err = f"K8sExecutionError: {exc}"
+        logger.error("[%s] %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="execution_failed", message=err, duration_ms=duration_ms,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err},
+            "trace_log": traces,
+        }
+    except Exception as exc:  # unexpected — fail safe, never crash the graph
+        duration_ms = (time.monotonic() - t_start) * 1000
+        err = f"Unexpected execution error: {exc}"
+        logger.exception("[%s] %s", node.value, err)
+        traces.append(make_trace_event(
+            node=node, event="execution_failed", message=err, duration_ms=duration_ms,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err},
+            "trace_log": traces,
+        }
+
+    duration_ms = (time.monotonic() - t_start) * 1000
+    if isinstance(result, K8sActionResult):
+        result_dict = _dataclass_to_dict(result)
+    elif isinstance(result, dict):
+        result_dict = dict(result)
+    else:  # pragma: no cover — defensive
+        result_dict = {"success": bool(result)}
+
+    success = bool(result_dict.get("success", False))
+    traces.append(make_trace_event(
+        node=node,
+        event="execution_succeeded" if success else "execution_failed",
+        message=f"Executor returned success={success} for operation={operation}",
+        duration_ms=duration_ms,
+        metadata={
+            "operation": operation,
+            "approval_id": approval_id,
+            "executed_by": result_dict.get("executed_by") or result_dict.get("fetched_by"),
+        },
+    ))
+
+    return {
+        "workflow_status": WorkflowStatus.COMPLETED if success else WorkflowStatus.FAILED,
+        "approval_status": ApprovalStatus.APPROVED if success else ApprovalStatus.PENDING,
+        "execution_result": result_dict,
+        "error_message": None if success else str(result_dict.get("error") or "execution failed"),
+        "trace_log": traces,
+    }
+

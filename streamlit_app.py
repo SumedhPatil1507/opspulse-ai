@@ -23,6 +23,7 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import requests
 import streamlit as st
 from plotly.subplots import make_subplots
 
@@ -188,6 +189,79 @@ def load_benchmarks() -> list[dict[str, Any]]:
 
 benchmark_incidents = load_benchmarks()
 
+# ── Prometheus Metrics Parsing ───────────────────────────────────────────────
+def parse_prometheus_counter(text: str, metric_name: str) -> float:
+    """Extract the sum of all label combinations for a counter metric."""
+    total = 0.0
+    for line in text.splitlines():
+        if line.startswith(metric_name + "{") or line.startswith(metric_name + " "):
+            parts = line.rsplit(" ", 1)
+            if len(parts) == 2:
+                try:
+                    total += float(parts[1])
+                except ValueError:
+                    pass
+    return total
+
+
+def parse_prometheus_histogram(text: str, metric_name: str) -> dict:
+    """Extract histogram metrics including count, sum, and bucket values."""
+    result = {"count": 0.0, "sum": 0.0, "buckets": {}}
+    for line in text.splitlines():
+        if line.startswith(metric_name + "_bucket{"):
+            try:
+                brace_end = line.index("}")
+                label_part = line[len(metric_name) + 1:brace_end]
+                value_part = line[brace_end + 2:].strip()
+                
+                if 'le="' in label_part:
+                    le_start = label_part.index('le="') + 4
+                    le_end = label_part.index('"', le_start)
+                    le_value = label_part[le_start:le_end]
+                    result["buckets"][le_value] = float(value_part)
+            except (ValueError, IndexError):
+                pass
+        elif line.startswith(metric_name + "_sum "):
+            try:
+                result["sum"] = float(line.split()[-1])
+            except ValueError:
+                pass
+        elif line.startswith(metric_name + "_count "):
+            try:
+                result["count"] = float(line.split()[-1])
+            except ValueError:
+                pass
+    return result
+
+
+def parse_all_metrics(text: str) -> dict:
+    """Parse all available Prometheus metrics into a structured dict."""
+    metrics = {}
+    
+    counter_names = [
+        "opspulse_incidents_auto_resolved_total",
+        "opspulse_hitl_approvals_total",
+        "opspulse_sandbox_operations_total",
+        "opspulse_runbook_retrievals_total",
+        "opspulse_llm_calls_total",
+    ]
+    
+    for name in counter_names:
+        if name in text:
+            metrics[name] = parse_prometheus_counter(text, name)
+    
+    histogram_names = [
+        "opspulse_agent_execution_latency_seconds",
+        "opspulse_sandbox_operation_latency_seconds",
+        "opspulse_llm_call_latency_seconds",
+    ]
+    
+    for name in histogram_names:
+        if name in text:
+            metrics[name] = parse_prometheus_histogram(text, name)
+    
+    return metrics
+
 # ── Header Banner ────────────────────────────────────────────────────────────
 st.markdown("""
 <div class="main-header">
@@ -223,15 +297,96 @@ with st.sidebar:
     **Quick Links**
     - [GitHub Repository](https://github.com/SumedhPatil1507/opspulse-ai)
     - [FastAPI Swagger Docs](http://localhost:8000/docs)
-    - [Prometheus Metrics](http://localhost:8000/metrics)
+    - [Prometheus Metrics](http://localhost:8000/metrics/)
     """)
+    
+    st.markdown("---")
+    st.markdown("### 📁 File Upload")
+    st.markdown("Upload incident data or runbooks to integrate with the system.")
+    
+    upload_type = st.radio("Upload Type", ["Incident Data (JSON)", "Runbook (Markdown)"])
+    
+    if upload_type == "Incident Data (JSON)":
+        uploaded_file = st.file_uploader(
+            "Upload incident data (JSON)",
+            type=["json"],
+            help="Upload a JSON file containing incident data to ingest into the system."
+        )
+        
+        if uploaded_file is not None:
+            try:
+                data = json.load(uploaded_file)
+                st.success(f"✅ Successfully loaded {len(data) if isinstance(data, list) else 1} incidents")
+                with st.expander("View Incident Data"):
+                    st.json(data)
+                
+                if st.button("🚀 Ingest to FastAPI", type="primary"):
+                    # Use batch ingest endpoint
+                    api_url = "http://localhost:8000/api/v1/alerts/ingest/batch"
+                    
+                    with st.spinner("Ingesting incidents..."):
+                        try:
+                            # Re-upload the file
+                            uploaded_file.seek(0)
+                            files = {"file": (uploaded_file.name, uploaded_file, "application/json")}
+                            response = requests.post(api_url, files=files, timeout=10)
+                            
+                            if response.status_code == 202:
+                                result = response.json()
+                                st.success(f"✅ Successfully ingested {result['successful']}/{result['total']} incidents")
+                                if result['failed'] > 0:
+                                    st.warning(f"⚠️ {result['failed']} incidents failed to ingest")
+                                    with st.expander("View Failed Ingestions"):
+                                        st.json(result['details']['failed'])
+                            else:
+                                st.error(f"❌ Failed to ingest: {response.text}")
+                        except Exception as e:
+                            st.error(f"❌ Error during ingestion: {e}")
+            except Exception as e:
+                st.error(f"❌ Error parsing JSON file: {e}")
+    
+    else:  # Runbook upload
+        uploaded_file = st.file_uploader(
+            "Upload runbook (Markdown)",
+            type=["md", "markdown"],
+            help="Upload a Markdown runbook to add to the knowledge base."
+        )
+        
+        if uploaded_file is not None:
+            try:
+                content = uploaded_file.read().decode("utf-8")
+                st.success(f"✅ Successfully loaded runbook: {uploaded_file.name}")
+                with st.expander("View Runbook Content"):
+                    st.markdown(content)
+                
+                if st.button("📤 Upload to FastAPI", type="primary"):
+                    api_url = "http://localhost:8000/api/v1/runbooks/upload"
+                    
+                    with st.spinner("Uploading runbook..."):
+                        try:
+                            # Re-upload the file
+                            uploaded_file.seek(0)
+                            files = {"file": (uploaded_file.name, uploaded_file, "text/markdown")}
+                            response = requests.post(api_url, files=files, timeout=10)
+                            
+                            if response.status_code == 201:
+                                result = response.json()
+                                st.success(f"✅ Runbook uploaded successfully to {result['path']}")
+                                st.info("📝 Runbook will be indexed automatically on next restart")
+                            else:
+                                st.error(f"❌ Failed to upload: {response.text}")
+                        except Exception as e:
+                            st.error(f"❌ Error during upload: {e}")
+            except Exception as e:
+                st.error(f"❌ Error processing file: {e}")
 
 # ── Main Dashboard Tabs ──────────────────────────────────────────────────────
-tab1, tab2, tab3, tab4 = st.tabs([
+tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "📊 SRE Operations Cockpit",
     "⚡ Interactive Chaos & RCA Simulator",
     "🛡️ Kubernetes HITL Action Engine",
     "📡 Real-time Kafka & DLQ Stream",
+    "🤖 AI Triage & Log Upload",
 ])
 
 # =============================================================================
@@ -241,10 +396,34 @@ with tab1:
     # KPI Row
     col1, col2, col3, col4, col5 = st.columns(5)
     
+    # Try to fetch live metrics
+    metrics_url = "http://localhost:8000/metrics/"
+    live_mode = False
+    live_metrics = {}
+    
+    try:
+        response = requests.get(metrics_url, timeout=3)
+        if response.status_code == 200:
+            live_mode = True
+            live_metrics = parse_all_metrics(response.text)
+    except Exception:
+        pass
+    
+    # Extract live metrics or use defaults
+    auto_resolved = int(live_metrics.get("opspulse_incidents_auto_resolved_total", 0)) if live_mode else 1247
+    hitl_approvals = int(live_metrics.get("opspulse_hitl_approvals_total", 0)) if live_mode else 89
+    llm_calls = int(live_metrics.get("opspulse_llm_calls_total", 0)) if live_mode else 3421
+    
+    if live_mode and "opspulse_agent_execution_latency_seconds" in live_metrics:
+        hist = live_metrics["opspulse_agent_execution_latency_seconds"]
+        avg_latency = round(hist["sum"] / hist["count"], 2) if hist["count"] > 0 else 4.2
+    else:
+        avg_latency = 4.2
+    
     with col1:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">1.4m</div>
+            <div class="metric-value">{avg_latency}s</div>
             <div class="metric-label">Mean Time to Remediate (MTTR)</div>
             <div class="metric-delta delta-pos">↓ 88% vs Manual SRE</div>
         </div>
@@ -260,31 +439,36 @@ with tab1:
         """, unsafe_allow_html=True)
 
     with col3:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">14.2k</div>
-            <div class="metric-label">Kafka Events / Sec</div>
+            <div class="metric-value">{llm_calls}</div>
+            <div class="metric-label">LLM Calls</div>
             <div class="metric-delta delta-pos">Steady stream</div>
         </div>
         """, unsafe_allow_html=True)
 
     with col4:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">0</div>
-            <div class="metric-label">Poison Pill Crashes (DLQ)</div>
-            <div class="metric-delta delta-pos">100% Offset Safety</div>
+            <div class="metric-value">{auto_resolved}</div>
+            <div class="metric-label">Auto-Resolved Incidents</div>
+            <div class="metric-delta delta-pos">Live from FastAPI</div>
         </div>
         """, unsafe_allow_html=True)
 
     with col5:
-        st.markdown("""
+        st.markdown(f"""
         <div class="metric-card">
-            <div class="metric-value">3</div>
-            <div class="metric-label">Pending HITL Approvals</div>
+            <div class="metric-value">{hitl_approvals}</div>
+            <div class="metric-label">HITL Approvals</div>
             <div class="metric-delta delta-neg">Requires SRE Review</div>
         </div>
         """, unsafe_allow_html=True)
+    
+    if live_mode:
+        st.success("✅ Connected to live FastAPI metrics endpoint")
+    else:
+        st.info("ℹ️ Using simulated data - start FastAPI with `uvicorn src.api.app:app` for live metrics")
 
     st.markdown("<br>", unsafe_allow_html=True)
 
@@ -476,12 +660,12 @@ with tab3:
 
     with c_act1:
         st.markdown("#### 📝 Trigger Remediation Action")
-        action_type = st.selectbox("Action Type", ["restart_deployment", "scale_replicas", "rollback_helm_release"])
+        action_type = st.selectbox("Action Type", ["restart_deployment", "scale_deployment", "rollback_helm_release", "fetch_pod_logs"])
         ns_input = st.text_input("Target Namespace", value="production")
         dep_input = st.text_input("Deployment / Release Name", value="payment-processor")
         
         replica_count = 3
-        if action_type == "scale_replicas":
+        if action_type == "scale_deployment":
             replica_count = st.number_input("Replica Count", min_value=0, max_value=50, value=5)
             
         approval_id_input = st.text_input("HITL Approval ID", value="hitl-84bf92a10c", help="Must be APPROVED in queue")
@@ -498,7 +682,7 @@ with tab3:
         
         queue_data = pd.DataFrame([
             {"Approval ID": "hitl-84bf92a10c", "Action": "restart_deployment", "Target": "production/payment-processor", "Status": "APPROVED", "Requested By": "opspulse-ai", "Approver": "alice.sre@company.com"},
-            {"Approval ID": "hitl-73ce41b99a", "Action": "scale_replicas", "Target": "production/order-gateway", "Status": "PENDING", "Requested By": "opspulse-ai", "Approver": "—"},
+            {"Approval ID": "hitl-73ce41b99a", "Action": "scale_deployment", "Target": "production/order-gateway", "Status": "PENDING", "Requested By": "opspulse-ai", "Approver": "—"},
             {"Approval ID": "hitl-12ef55dd44", "Action": "rollback_helm_release", "Target": "production/auth-service", "Status": "EXECUTED", "Requested By": "opspulse-ai", "Approver": "bob.sre@company.com"},
         ])
         st.dataframe(queue_data, use_container_width=True, hide_index=True)
@@ -535,11 +719,11 @@ with tab4:
     k_col1, k_col2 = st.columns(2)
 
     with k_col1:
-        st.markdown("#### 📥 `k8s.pod.logs` & `k8s.node.metrics` Live Stream")
+        st.markdown("#### 📥 `k8s.pod.logs` & `k8s.system.alerts` Live Stream")
         recent_kafka_logs = [
             {"Topic": "k8s.pod.logs", "Partition": 0, "Offset": 104289, "Level": "INFO", "Pod": "payment-processor-4j92x", "Message": "HTTP 200 POST /v1/charge (42ms)"},
             {"Topic": "k8s.pod.logs", "Partition": 1, "Offset": 84920, "Level": "WARN", "Pod": "checkout-api-7x9zl", "Message": "CFS CPU Throttled 86% period"},
-            {"Topic": "k8s.node.metrics", "Partition": 0, "Offset": 43210, "Level": "INFO", "Pod": "gke-pool-node-3a", "Message": "CPU: 68.4% | Memory: 94.2% | Disk: 42.1%"},
+            {"Topic": "k8s.system.alerts", "Partition": 0, "Offset": 43210, "Level": "CRITICAL", "Pod": "gke-pool-node-3a", "Message": "NodePressure: memory available 4.2% < 5% threshold"},
             {"Topic": "k8s.pod.logs", "Partition": 0, "Offset": 104290, "Level": "ERROR", "Pod": "payment-processor-4j92x", "Message": "java.lang.OutOfMemoryError: Java heap space"},
         ]
         st.dataframe(pd.DataFrame(recent_kafka_logs), use_container_width=True, hide_index=True)
@@ -548,10 +732,184 @@ with tab4:
         st.markdown("#### ☠️ `k8s.telemetry.dlq` Dead Letter Queue (Poison Pill Guard)")
         dlq_records = [
             {"DLQ Offset": 14, "Original Topic": "k8s.pod.logs", "Error": "JSONDecodeError: Unterminated string", "Payload Preview": "{bad_json: missing_quotes...}", "Status": "ISOLATED & COMMITTED"},
-            {"DLQ Offset": 15, "Original Topic": "k8s.node.metrics", "Error": "ValidationError: missing 'node_name'", "Payload Preview": "{\"cpu_pct\": 99.0}", "Status": "ISOLATED & COMMITTED"},
+            {"DLQ Offset": 15, "Original Topic": "k8s.system.alerts", "Error": "ValidationError: missing 'reason'", "Payload Preview": "{\"severity\": \"critical\"}", "Status": "ISOLATED & COMMITTED"},
         ]
         st.dataframe(pd.DataFrame(dlq_records), use_container_width=True, hide_index=True)
 
     st.markdown("""
-    > 💡 **Manual Offset Commit Guarantee:** Offsets are committed with `enable.auto.commit=False` only after successful processing or DLQ quarantine, guaranteeing zero pipeline blockages and exactly-once execution semantics.
+    > 💡 **Manual Offset Commit Guarantee:** Offsets are committed with `enable.auto.commit=False` only after successful LangGraph triage or DLQ quarantine — never before — guaranteeing zero pipeline blockages and at-least-once execution semantics.
     """)
+
+
+# =============================================================================
+# TAB 5: AI Triage & Drag-and-Drop Log / Runbook Upload
+# =============================================================================
+with tab5:
+    st.markdown("### 🤖 AI Incident Triage · Drag-and-Drop Ingestion")
+    st.markdown(
+        "Upload raw stack traces (`.log`, `.txt`) for instant explainable triage, "
+        "or Markdown runbooks (`.md`) to index into Qdrant **on the fly**. "
+        "Every triage response uses the standardized schema: "
+        "`verdict` → `reasoning` → `recommendation` → `next_steps`."
+    )
+
+    api_base = "http://localhost:8000"
+    up_col1, up_col2 = st.columns([1, 1])
+
+    with up_col1:
+        st.markdown("#### 📂 Drag-and-Drop Upload")
+        uploaded_files = st.file_uploader(
+            "Drop log / runbook files here",
+            type=["log", "txt", "md", "markdown"],
+            accept_multiple_files=True,
+            help=(
+                "`.log` / `.txt` → stack traces triaged by the LangGraph agent. "
+                "`.md` → infrastructure runbooks indexed into Qdrant instantly."
+            ),
+        )
+
+        log_files = [f for f in (uploaded_files or []) if f.name.lower().endswith((".log", ".txt"))]
+        md_files = [f for f in (uploaded_files or []) if f.name.lower().endswith((".md", ".markdown"))]
+
+        if uploaded_files:
+            st.caption(f"**{len(log_files)}** log file(s) · **{len(md_files)}** runbook(s) ready")
+
+        run_btn = st.button(
+            "🚀 Upload & Triage", type="primary", use_container_width=True,
+            disabled=not uploaded_files,
+        )
+
+        if run_btn and uploaded_files:
+            multipart = [("files", (f.name, f.getvalue(), "text/plain")) for f in uploaded_files]
+            try:
+                with st.spinner("Uploading, indexing, and triaging…"):
+                    resp = requests.post(
+                        f"{api_base}/api/v1/logs/upload", files=multipart, timeout=120,
+                    )
+                if resp.status_code == 200:
+                    st.session_state["triage_upload_result"] = resp.json()
+                    st.success("✅ Ingestion complete — see triage report on the right.")
+                elif resp.status_code == 503:
+                    st.warning(
+                        "⚠️ Runbook saved but vector indexing unavailable: "
+                        f"{resp.json().get('detail', resp.text)}"
+                    )
+                else:
+                    st.error(f"❌ HTTP {resp.status_code}: {resp.text}")
+            except requests.exceptions.ConnectionError:
+                st.error(
+                    "❌ FastAPI backend unreachable at "
+                    f"`{api_base}` — start it with `python main.py`."
+                )
+            except Exception as e:
+                st.error(f"❌ Upload failed: {e}")
+
+    with up_col2:
+        st.markdown("#### 📋 Standardized Remediation Report")
+        result = st.session_state.get("triage_upload_result")
+
+        if not result:
+            st.info(
+                "Upload a `.log` / `.txt` stack trace to see the explainable "
+                "triage verdict here."
+            )
+        else:
+            triage = result.get("triage")
+            if triage:
+                verdict = triage["verdict"]
+                if "CRITICAL" in verdict or "CASCADE" in verdict:
+                    st.error(f"### 🚨 {verdict}")
+                elif "HIGH" in verdict:
+                    st.warning(f"### ⚠️ {verdict}")
+                else:
+                    st.success(f"### ✅ {verdict}")
+
+                st.markdown("**🧠 Reasoning**")
+                st.write(triage["reasoning"])
+
+                st.markdown("**🛠️ Risk-Rated Recommendation**")
+                st.code(triage["recommendation"], language="text")
+
+                st.markdown("**🧭 Next Steps**")
+                for step in triage["next_steps"]:
+                    st.markdown(f"- {step}")
+
+                with st.expander("📄 Raw standardized JSON"):
+                    st.json(triage)
+
+                st.caption(
+                    f"Workflow: `{result.get('workflow_status', '')}` · "
+                    f"Approval: `{result.get('approval_status', '')}`"
+                )
+
+            for rb in result.get("runbooks", []):
+                st.success(
+                    f"📚 Runbook `{rb['filename']}` indexed → "
+                    f"{rb.get('indexed_chunks', 0)} chunks in `{rb.get('collection')}`"
+                )
+
+    st.markdown("---")
+    st.markdown("#### ⚡ Quick Triage (paste a stack trace)")
+
+    quick_text = st.text_area(
+        "Paste raw stack trace / log excerpt",
+        height=160,
+        placeholder=(
+            "java.lang.OutOfMemoryError: Java heap space\n"
+            "    at com.payments.App.processCharge(App.java:42)\n…"
+        ),
+    )
+    if st.button("🧠 Run Quick Triage", disabled=not quick_text.strip()):
+        try:
+            with st.spinner("Triaging…"):
+                resp = requests.post(
+                    f"{api_base}/api/v1/triage",
+                    json={"raw_log_stacktrace": quick_text},
+                    timeout=120,
+                )
+            if resp.status_code == 200:
+                st.session_state["quick_triage"] = resp.json()
+                st.json(resp.json())
+            else:
+                st.error(f"❌ HTTP {resp.status_code}: {resp.text}")
+        except requests.exceptions.ConnectionError:
+            st.error(f"❌ FastAPI backend unreachable at `{api_base}`.")
+        except Exception as e:
+            st.error(f"❌ Triage failed: {e}")
+
+    # ── Interactive Plotly charts over this session's triage history ───────
+    history = st.session_state.setdefault("triage_history", [])
+    if st.session_state.get("quick_triage"):
+        history.append(st.session_state.pop("quick_triage"))
+
+    if history:
+        st.markdown("#### 📈 Triage Verdicts (this session)")
+        hist_df = pd.DataFrame(history)
+        hist_df["step_count"] = hist_df["next_steps"].apply(len)
+        hist_df["triage_n"] = [f"#{i + 1}" for i in range(len(hist_df))]
+
+        fig_hist = px.bar(
+            hist_df, x="triage_n", y="step_count",
+            color="recommendation", color_discrete_sequence=px.colors.qualitative.Bold,
+            title="Actionable steps per triaged incident",
+            labels={"step_count": "Next Steps", "triage_n": "Triage"},
+        )
+        fig_hist.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(13,13,31,0.6)", height=380, showlegend=False,
+        )
+        st.plotly_chart(fig_hist, use_container_width=True)
+
+        verdict_counts = hist_df["verdict"].value_counts().reset_index()
+        verdict_counts.columns = ["verdict", "count"]
+        fig_verdict = px.bar(
+            verdict_counts, x="count", y="verdict", orientation="h",
+            title="Verdict distribution",
+            labels={"count": "Occurrences", "verdict": "Verdict"},
+            color="count", color_continuous_scale="Reds",
+        )
+        fig_verdict.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(13,13,31,0.6)", height=320,
+        )
+        st.plotly_chart(fig_verdict, use_container_width=True)

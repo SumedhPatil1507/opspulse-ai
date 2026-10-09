@@ -17,6 +17,17 @@ celery==5.4.0
 redis==5.1.1                       # Python Redis client (used by Celery kombu)
 kombu==5.3.7                       # Celery's messaging library (pinned for compat)
 
+# ── Real-time Kafka event streaming ───────────────────────────────────────────
+confluent-kafka==2.3.0             # Official librdkafka bindings — manual offset
+                                   # commit consumer + DLQ producer
+
+# ── Kubernetes action execution engine ────────────────────────────────────────
+kubernetes==36.0.3                 # Official client SDK (AppsV1Api, CoreV1Api)
+PyJWT==2.12.1                      # ROLE_SRE_ADMIN JWT signing/verification gate
+
+# ── File upload (multipart/form-data) ─────────────────────────────────────────
+python-multipart==0.0.12           # FastAPI UploadFile support (/logs/upload)
+
 # ── HTTP client (Slack webhook + tests) ───────────────────────────────────────
 httpx==0.27.2
 

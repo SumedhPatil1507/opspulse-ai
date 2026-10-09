@@ -1,0 +1,133 @@
+{
+  "incident_id": "INC-2026-007",
+  "incident_type": "NetworkPolicyConnectionBlocked",
+  "timestamp_start": "2026-10-08T17:00:00Z",
+  "timestamp_end": "2026-10-08T17:15:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "microservices",
+  "affected_pods": [
+    "service-a-7a8b9-c0d1e",
+    "service-b-8c9d0-e2f3g",
+    "service-c-9e1f2-g4h5i"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T17:00:15.123Z",
+      "level": "INFO",
+      "component": "network-policy-controller",
+      "message": "Network policy 'deny-all-egress' applied to namespace microservices"
+    },
+    {
+      "timestamp": "2026-10-08T17:00:20.456Z",
+      "level": "ERROR",
+      "component": "service-a",
+      "pod": "service-a-7a8b9-c0d1e",
+      "message": "Connection refused to service-b.microservices.svc.cluster.local:8080 - network policy denied"
+    },
+    {
+      "timestamp": "2026-10-08T17:00:25.789Z",
+      "level": "ERROR",
+      "component": "service-b",
+      "pod": "service-b-8c9d0-e2f3g",
+      "message": "Unable to reach external API https://api.external.com - network policy blocked egress"
+    },
+    {
+      "timestamp": "2026-10-08T17:00:30.123Z",
+      "level": "ERROR",
+      "component": "service-c",
+      "pod": "service-c-9e1f2-g4h5i",
+      "message": "DNS resolution failed for external domain - network policy blocked UDP to CoreDNS"
+    },
+    {
+      "timestamp": "2026-10-08T17:00:35.456Z",
+      "level": "WARNING",
+      "component": "kube-proxy",
+      "node": "aks-worker-01",
+      "message": "Pod service-a-7a8b9-c0d1e cannot connect to service-b: network policy block"
+    },
+    {
+      "timestamp": "2026-10-08T17:00:40.789Z",
+      "level": "ERROR",
+      "component": "service-a",
+      "pod": "service-a-7a8b9-c0d1e",
+      "message": "Retry attempt 1 failed: connection timeout after 30s"
+    },
+    {
+      "timestamp": "2026-10-08T17:01:00.123Z",
+      "level": "CRITICAL",
+      "component": "service-a",
+      "pod": "service-a-7a8b9-c0d1e",
+      "message": "All downstream service connections blocked - service degraded"
+    },
+    {
+      "timestamp": "2026-10-08T17:01:15.456Z",
+      "level": "ERROR",
+      "component": "service-b",
+      "pod": "service-b-8c9d0-e2f3g",
+      "message": "Cannot connect to database: network policy denied ingress to database namespace"
+    },
+    {
+      "timestamp": "2026-10-08T17:01:30.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: NetworkPolicyDeny - 95% of connections blocked in microservices namespace"
+    },
+    {
+      "timestamp": "2026-10-08T17:02:00.123Z",
+      "level": "ERROR",
+      "component": "api-gateway",
+      "message": "Microservices degraded: network policy blocking inter-service communication"
+    },
+    {
+      "timestamp": "2026-10-08T17:02:30.456Z",
+      "level": "WARNING",
+      "component": "calico-node",
+      "node": "aks-worker-01",
+      "message": "High number of network policy drops: 15000 packets/sec"
+    },
+    {
+      "timestamp": "2026-10-08T17:03:00.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: NetworkPolicyHighDropRate - 98% packet drop rate in microservices"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T17:00:00Z",
+      "metric": "network_policy_drop_total",
+      "labels": {"namespace": "microservices", "policy": "deny-all-egress"},
+      "value": 15000
+    },
+    {
+      "timestamp": "2026-10-08T17:00:30Z",
+      "metric": "network_connection_errors_total",
+      "labels": {"pod": "service-a-7a8b9-c0d1e", "type": "policy_deny"},
+      "value": 5000
+    },
+    {
+      "timestamp": "2026-10-08T17:01:00Z",
+      "metric": "calico_felix_drop_packets_total",
+      "labels": {"node": "aks-worker-01", "reason": "policy_deny"},
+      "value": 25000
+    },
+    {
+      "timestamp": "2026-10-08T17:01:30Z",
+      "metric": "service_connection_failure_rate",
+      "labels": {"service": "service-a", "destination": "service-b"},
+      "value": 0.98
+    },
+    {
+      "timestamp": "2026-10-08T17:02:00Z",
+      "metric": "http_requests_total",
+      "labels": {"status": "503", "namespace": "microservices"},
+      "value": 3200
+    },
+    {
+      "timestamp": "2026-10-08T17:02:30Z",
+      "metric": "network_latency_seconds",
+      "labels": {"pod": "service-a-7a8b9-c0d1e", "type": "egress"},
+      "value": 30.0
+    }
+  ]
+}

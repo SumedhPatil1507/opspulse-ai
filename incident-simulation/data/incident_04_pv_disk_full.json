@@ -1,0 +1,134 @@
+{
+  "incident_id": "INC-2026-004",
+  "incident_type": "PersistentVolumeDiskFull",
+  "timestamp_start": "2026-10-08T14:00:00Z",
+  "timestamp_end": "2026-10-08T14:20:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "database",
+  "affected_pods": [
+    "postgres-primary-3a4b5-c6d7e",
+    "postgres-replica-3a4b5-f8g9h"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T14:00:15.123Z",
+      "level": "WARNING",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "Disk space low on /var/lib/postgresql/data: 95% used (475GB/500GB)"
+    },
+    {
+      "timestamp": "2026-10-08T14:00:30.456Z",
+      "level": "WARNING",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "Checkpoints failing due to insufficient disk space"
+    },
+    {
+      "timestamp": "2026-10-08T14:01:00.789Z",
+      "level": "ERROR",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "ERROR: could not write to file 'pg_wal/000000010000000000000001': No space left on device"
+    },
+    {
+      "timestamp": "2026-10-08T14:01:15.123Z",
+      "level": "CRITICAL",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "FATAL: database system is in recovery mode, only read-only queries allowed"
+    },
+    {
+      "timestamp": "2026-10-08T14:01:30.456Z",
+      "level": "ERROR",
+      "component": "postgres",
+      "pod": "postgres-replica-3a4b5-f8g9h",
+      "message": "Replication lag increasing: WAL replication blocked"
+    },
+    {
+      "timestamp": "2026-10-08T14:02:00.789Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-03",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "Volume pvc-8a9b0c-1234-4567-89ab-cdef01234567 usage at 98% (490GB/500GB)"
+    },
+    {
+      "timestamp": "2026-10-08T14:02:30.123Z",
+      "level": "ERROR",
+      "component": "payment-app",
+      "pod": "payment-processor-7f8b9-k2x4m",
+      "message": "Database connection failed: database is in recovery mode"
+    },
+    {
+      "timestamp": "2026-10-08T14:03:00.456Z",
+      "level": "CRITICAL",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "Write operations blocked: disk full condition persists"
+    },
+    {
+      "timestamp": "2026-10-08T14:03:30.789Z",
+      "level": "ERROR",
+      "component": "api-gateway",
+      "message": "Payment service unavailable - database connection errors"
+    },
+    {
+      "timestamp": "2026-10-08T14:04:00.123Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: PersistentVolumeUsageCritical - PVC database-pv-usage at 98%"
+    },
+    {
+      "timestamp": "2026-10-08T14:04:30.456Z",
+      "level": "ERROR",
+      "component": "postgres",
+      "pod": "postgres-primary-3a4b5-c6d7e",
+      "message": "Autovacuum worker failed: no space left on device"
+    },
+    {
+      "timestamp": "2026-10-08T14:05:00.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: PostgreSQLReplicationLag - replication lag exceeds 10 minutes"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T14:00:00Z",
+      "metric": "kubelet_volume_stats_used_bytes",
+      "labels": {"pod": "postgres-primary-3a4b5-c6d7e", "persistentvolumeclaim": "postgres-pvc"},
+      "value": 475000000000
+    },
+    {
+      "timestamp": "2026-10-08T14:01:00Z",
+      "metric": "kubelet_volume_stats_capacity_bytes",
+      "labels": {"pod": "postgres-primary-3a4b5-c6d7e", "persistentvolumeclaim": "postgres-pvc"},
+      "value": 500000000000
+    },
+    {
+      "timestamp": "2026-10-08T14:01:30Z",
+      "metric": "pg_replication_lag_seconds",
+      "labels": {"pod": "postgres-replica-3a4b5-f8g9h"},
+      "value": 600
+    },
+    {
+      "timestamp": "2026-10-08T14:02:00Z",
+      "metric": "postgres_database_size_bytes",
+      "labels": {"database": "payments"},
+      "value": 475000000000
+    },
+    {
+      "timestamp": "2026-10-08T14:03:00Z",
+      "metric": "pg_stat_database_tuples_returned",
+      "labels": {"database": "payments"},
+      "value": 0
+    },
+    {
+      "timestamp": "2026-10-08T14:04:00Z",
+      "metric": "kube_persistentvolumeclaim_resource_requests_storage_bytes",
+      "labels": {"persistentvolumeclaim": "postgres-pvc"},
+      "value": 500000000000
+    }
+  ]
+}

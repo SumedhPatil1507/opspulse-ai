@@ -1,0 +1,134 @@
+{
+  "incident_id": "INC-2026-003",
+  "incident_type": "CoreDNS_ResolutionTimeout",
+  "timestamp_start": "2026-10-08T12:45:00Z",
+  "timestamp_end": "2026-10-08T13:00:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "kube-system",
+  "affected_pods": [
+    "coredns-6b7b8-c9d0e",
+    "coredns-6b7b8-e1f2g"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T12:45:15.123Z",
+      "level": "WARNING",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-c9d0e",
+      "message": "DNS query timeout for 'payment-service.payment-service.svc.cluster.local.' after 5s"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:20.456Z",
+      "level": "WARNING",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-c9d0e",
+      "message": "DNS query timeout for 'api-gateway.default.svc.cluster.local.' after 5s"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:25.789Z",
+      "level": "ERROR",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-c9d0e",
+      "message": "Upstream DNS server timeout: connection to 8.8.8.8:53 failed after 10s"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:30.123Z",
+      "level": "WARNING",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-e1f2g",
+      "message": "DNS query timeout for 'redis-cache.payment-service.svc.cluster.local.' after 5s"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:35.456Z",
+      "level": "ERROR",
+      "component": "payment-app",
+      "pod": "payment-processor-7f8b9-k2x4m",
+      "message": "DNS resolution failed for redis-cache.payment-service.svc.cluster.local: dial tcp: lookup redis-cache.payment-service.svc.cluster.local on 10.0.0.10:53: i/o timeout"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:40.789Z",
+      "level": "ERROR",
+      "component": "api-gateway",
+      "pod": "api-gateway-9a8b7-x3y4z",
+      "message": "Failed to resolve upstream service: payment-service"
+    },
+    {
+      "timestamp": "2026-10-08T12:45:45.123Z",
+      "level": "CRITICAL",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-c9d0e",
+      "message": "CoreDNS experiencing high latency: 95th percentile query time exceeding 5s"
+    },
+    {
+      "timestamp": "2026-10-08T12:46:00.456Z",
+      "level": "WARNING",
+      "component": "kube-proxy",
+      "node": "aks-worker-01",
+      "message": "Endpoint slice sync delayed due to DNS resolution failures"
+    },
+    {
+      "timestamp": "2026-10-08T12:46:15.789Z",
+      "level": "ERROR",
+      "component": "user-service",
+      "pod": "user-service-4d5e6-f7g8h",
+      "message": "Connection timeout to auth-service: DNS resolution failed"
+    },
+    {
+      "timestamp": "2026-10-08T12:46:30.123Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: CoreDNSLatencyHigh - DNS query latency > 5s for 60% of queries"
+    },
+    {
+      "timestamp": "2026-10-08T12:47:00.456Z",
+      "level": "ERROR",
+      "component": "coredns",
+      "pod": "coredns-6b7b8-c9d0e",
+      "message": "Cache miss rate at 95%, DNS queries falling through to upstream"
+    },
+    {
+      "timestamp": "2026-10-08T12:47:30.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: DNSTimeout - 85% of DNS queries timing out across cluster"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T12:45:00Z",
+      "metric": "coredns_dns_requests_total",
+      "labels": {"pod": "coredns-6b7b8-c9d0e"},
+      "value": 15000
+    },
+    {
+      "timestamp": "2026-10-08T12:45:30Z",
+      "metric": "coredns_dns_responses_total",
+      "labels": {"pod": "coredns-6b7b8-c9d0e", "rcode": "SERVFAIL"},
+      "value": 8750
+    },
+    {
+      "timestamp": "2026-10-08T12:46:00Z",
+      "metric": "coredns_dns_request_duration_seconds",
+      "labels": {"pod": "coredns-6b7b8-c9d0e", "quantile": "0.95"},
+      "value": 6.5
+    },
+    {
+      "timestamp": "2026-10-08T12:46:30Z",
+      "metric": "kube_pod_status_phase",
+      "labels": {"pod": "coredns-6b7b8-c9d0e", "phase": "Running"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T12:47:00Z",
+      "metric": "upstream_dns_latency_seconds",
+      "labels": {"upstream": "8.8.8.8"},
+      "value": 12.3
+    },
+    {
+      "timestamp": "2026-10-08T12:47:30Z",
+      "metric": "dns_lookup_failure_rate",
+      "labels": {"namespace": "payment-service"},
+      "value": 0.85
+    }
+  ]
+}

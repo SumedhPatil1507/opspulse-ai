@@ -1,0 +1,137 @@
+{
+  "incident_id": "INC-2026-005",
+  "incident_type": "CPU_Throttling_PerformanceDegradation",
+  "timestamp_start": "2026-10-08T15:30:00Z",
+  "timestamp_end": "2026-10-08T15:50:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "api-service",
+  "affected_pods": [
+    "api-frontend-1a2b3-c4d5e",
+    "api-frontend-1a2b3-e6f7g",
+    "api-backend-2a3b4-h8i9j"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T15:30:15.123Z",
+      "level": "INFO",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "api-frontend-1a2b3-c4d5e",
+      "message": "CPU request: 500m, limit: 1000m, current usage: 950m"
+    },
+    {
+      "timestamp": "2026-10-08T15:30:20.456Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "api-frontend-1a2b3-c4d5e",
+      "message": "CPU throttling active: container exceeded CPU limit of 1000m"
+    },
+    {
+      "timestamp": "2026-10-08T15:30:25.789Z",
+      "level": "WARNING",
+      "component": "api-frontend",
+      "pod": "api-frontend-1a2b3-c4d5e",
+      "message": "Request processing latency increased: p95 at 2500ms (baseline: 200ms)"
+    },
+    {
+      "timestamp": "2026-10-08T15:30:35.123Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-02",
+      "pod": "api-frontend-1a2b3-e6f7g",
+      "message": "CPU throttling active: container exceeded CPU limit of 1000m"
+    },
+    {
+      "timestamp": "2026-10-08T15:30:45.456Z",
+      "level": "ERROR",
+      "component": "api-backend",
+      "pod": "api-backend-2a3b4-h8i9j",
+      "message": "Slow response from frontend: timeout after 5s"
+    },
+    {
+      "timestamp": "2026-10-08T15:31:00.789Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-03",
+      "pod": "api-backend-2a3b4-h8i9j",
+      "message": "CPU throttling active: container exceeded CPU limit of 2000m"
+    },
+    {
+      "timestamp": "2026-10-08T15:31:15.123Z",
+      "level": "ERROR",
+      "component": "api-frontend",
+      "pod": "api-frontend-1a2b3-c4d5e",
+      "message": "CpuThrottlingHigh: 45% of CPU time throttled in last 5 minutes"
+    },
+    {
+      "timestamp": "2026-10-08T15:31:30.456Z",
+      "level": "WARNING",
+      "component": "api-backend",
+      "pod": "api-backend-2a3b4-h8i9j",
+      "message": "Database query timeout due to CPU starvation"
+    },
+    {
+      "timestamp": "2026-10-08T15:32:00.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: ContainerCpuThrottlingHigh - api-frontend pods experiencing 40%+ CPU throttling"
+    },
+    {
+      "timestamp": "2026-10-08T15:32:30.123Z",
+      "level": "ERROR",
+      "component": "api-gateway",
+      "message": "Frontend service slow: 95th percentile latency at 4.5s"
+    },
+    {
+      "timestamp": "2026-10-08T15:33:00.456Z",
+      "level": "WARNING",
+      "component": "kube-scheduler",
+      "message": "Node aks-worker-01 CPU utilization at 92%, unable to schedule new pods"
+    },
+    {
+      "timestamp": "2026-10-08T15:33:30.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: HighNodeCpuUtilization - cluster CPU utilization at 85%"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T15:30:00Z",
+      "metric": "container_cpu_usage_seconds_total",
+      "labels": {"pod": "api-frontend-1a2b3-c4d5e", "container": "api-frontend"},
+      "value": 950
+    },
+    {
+      "timestamp": "2026-10-08T15:30:30Z",
+      "metric": "rate(container_cpu_cfs_throttled_seconds_total)",
+      "labels": {"pod": "api-frontend-1a2b3-c4d5e", "container": "api-frontend"},
+      "value": 0.45
+    },
+    {
+      "timestamp": "2026-10-08T15:31:00Z",
+      "metric": "container_cpu_cfs_periods_total",
+      "labels": {"pod": "api-frontend-1a2b3-c4d5e", "container": "api-frontend"},
+      "value": 30000
+    },
+    {
+      "timestamp": "2026-10-08T15:31:30Z",
+      "metric": "container_cpu_cfs_throttled_periods_total",
+      "labels": {"pod": "api-frontend-1a2b3-c4d5e", "container": "api-frontend"},
+      "value": 13500
+    },
+    {
+      "timestamp": "2026-10-08T15:32:00Z",
+      "metric": "http_request_duration_seconds",
+      "labels": {"service": "api-frontend", "quantile": "0.95"},
+      "value": 4.5
+    },
+    {
+      "timestamp": "2026-10-08T15:32:30Z",
+      "metric": "node_cpu_usage_seconds_total",
+      "labels": {"node": "aks-worker-01", "mode": "idle"},
+      "value": 8
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+{
+  "incident_id": "INC-2026-009",
+  "incident_type": "NodeNotReady_DiskPressure",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "NodeHealthChecker",
+      "StorageDiagnostics",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for node NotReady events",
+        "findings": [
+          "Node aks-worker-04 disk usage at 92% (warning)",
+          "Disk usage increased to 98% (critical)",
+          "Node marked NotReady due to DiskPressure",
+          "Pods evicted from node due to disk pressure"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "step": 2,
+        "agent": "NodeHealthChecker",
+        "action": "Check node health and conditions",
+        "findings": [
+          "Node aks-worker-04 status: NotReady",
+          "Node condition DiskPressure: True",
+          "Node marked unschedulable",
+          "Node taint 'node.kubernetes.io/disk-pressure' applied"
+        ],
+        "confidence": 0.98
+      },
+      {
+        "step": 3,
+        "agent": "StorageDiagnostics",
+        "action": "Analyze disk usage and identify space consumers",
+        "findings": [
+          "Node disk usage: 980GB/1000GB (98%)",
+          "Docker images and containers using 450GB",
+          "Log files using 300GB",
+          "Temporary files using 200GB",
+          "System overhead using 30GB"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: Node disk full due to accumulated Docker images and logs",
+          "Contributing factor: No automated cleanup of unused Docker images",
+          "Log rotation not configured properly",
+          "Temporary files not cleaned up"
+        ],
+        "confidence": 0.95,
+        "root_cause": "Node disk full due to insufficient cleanup of Docker images and logs"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl cordon aks-worker-04",
+            "rationale": "Mark node as unschedulable to prevent new pod placement"
+          },
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl drain aks-worker-04 --ignore-daemonsets --delete-emptydir-data",
+            "rationale": "Evict all pods from node to enable disk cleanup"
+          },
+          {
+            "priority": "HIGH",
+            "command": "az aks nodepool update --resource-group <rg-name> --cluster-name <cluster-name> --nodepool-name nodepool1 --node-image-only",
+            "rationale": "Trigger node image update which includes disk cleanup via Azure CLI"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl create job cleanup-node --from=cronjob/kube-disk-cleaner -n kube-system",
+            "rationale": "Trigger immediate disk cleanup job"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl uncordon aks-worker-04",
+            "rationale": "Mark node as schedulable after cleanup"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl apply -f - <<EOF\napiVersion: batch/v1beta1\nkind: CronJob\nmetadata:\n  name: node-disk-cleanup\n  namespace: kube-system\nspec:\n  schedule: \"0 2 * * *\"\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          hostPID: true\n          containers:\n          - name: cleanup\n            image: ubuntu:22.04\n            command: ['sh', '-c', 'apt-get update && apt-get install -y containerd && crictl rmi --prune && rm -rf /var/log/*.log /tmp/*']\n            securityContext:\n              privileged: true\n          restartPolicy: OnFailure\nEOF",
+            "rationale": "Deploy CronJob for periodic node disk cleanup"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl patch node aks-worker-04 -p '{\"spec\":{\"unschedulable\":false}}'",
+            "rationale": "Ensure node is schedulable after remediation"
+          }
+        ],
+        "confidence": 0.92
+      }
+    ],
+    "overall_confidence": 0.95,
+    "remediation_validation": [
+      "Verify node disk usage dropped below 70%",
+      "Check node status returned to Ready",
+      "Confirm pods rescheduled successfully",
+      "Monitor disk usage over next 24 hours"
+    ]
+  }
+}

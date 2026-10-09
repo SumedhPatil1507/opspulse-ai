@@ -1,0 +1,133 @@
+{
+  "incident_id": "INC-2026-010",
+  "incident_type": "HPAScaleFailure_InsufficientMetrics",
+  "timestamp_start": "2026-10-08T20:15:00Z",
+  "timestamp_end": "2026-10-08T20:30:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "web-frontend",
+  "affected_pods": [
+    "web-frontend-2a3b4-c5d6e",
+    "web-frontend-2a3b4-e7f8g"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T20:15:15.123Z",
+      "level": "INFO",
+      "component": "horizontal-pod-autoscaler",
+      "message": "HPA web-frontend evaluating scale target: current replicas=2, desired replicas=10"
+    },
+    {
+      "timestamp": "2026-10-08T20:15:20.456Z",
+      "level": "WARNING",
+      "component": "horizontal-pod-autoscaler",
+      "message": "Unable to calculate metrics: missing CPU metrics for pods"
+    },
+    {
+      "timestamp": "2026-10-08T20:15:25.789Z",
+      "level": "ERROR",
+      "component": "horizontal-pod-autoscaler",
+      "message": "Failed to scale: missing CPU metrics for web-frontend deployment"
+    },
+    {
+      "timestamp": "2026-10-08T20:15:30.123Z",
+      "level": "WARNING",
+      "component": "metrics-server",
+      "message": "Metrics server unable to scrape pod web-frontend-2a3b4-c5d6e: connection timeout"
+    },
+    {
+      "timestamp": "2026-10-08T20:15:35.456Z",
+      "level": "ERROR",
+      "component": "metrics-server",
+      "message": "Metrics server unable to scrape pod web-frontend-2a3b4-e7f8g: connection timeout"
+    },
+    {
+      "timestamp": "2026-10-08T20:15:40.789Z",
+      "level": "WARNING",
+      "component": "horizontal-pod-autoscaler",
+      "message": "HPA web-frontend unable to scale: missing metrics for 100% of pods"
+    },
+    {
+      "timestamp": "2026-10-08T20:16:00.123Z",
+      "level": "ERROR",
+      "component": "web-frontend",
+      "pod": "web-frontend-2a3b4-c5d6e",
+      "message": "High load detected: request rate at 5000 req/s, but unable to scale"
+    },
+    {
+      "timestamp": "2026-10-08T20:16:15.456Z",
+      "level": "ERROR",
+      "component": "web-frontend",
+      "pod": "web-frontend-2a3b4-e7f8g",
+      "message": "Response latency increased: p95 at 3000ms (baseline: 150ms)"
+    },
+    {
+      "timestamp": "2026-10-08T20:16:30.789Z",
+      "level": "CRITICAL",
+      "component": "horizontal-pod-autoscaler",
+      "message": "HPA web-frontend stuck at 2 replicas despite high load"
+    },
+    {
+      "timestamp": "2026-10-08T20:17:00.123Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Metrics server health check failed: not responding"
+    },
+    {
+      "timestamp": "2026-10-08T20:17:30.456Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: HPAUnableToScale - web-frontend unable to scale for 2 minutes"
+    },
+    {
+      "timestamp": "2026-10-08T20:18:00.789Z",
+      "level": "ERROR",
+      "component": "web-frontend",
+      "pod": "web-frontend-2a3b4-c5d6e",
+      "message": "Service degraded: returning 503 for 40% of requests"
+    },
+    {
+      "timestamp": "2026-10-08T20:18:30.123Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: MetricsServerDown - metrics-server not responding in kube-system"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T20:15:00Z",
+      "metric": "kube_horizontalpodautoscaler_status_desired_replicas",
+      "labels": {"horizontalpodautoscaler": "web-frontend", "namespace": "web-frontend"},
+      "value": 10
+    },
+    {
+      "timestamp": "2026-10-08T20:15:30Z",
+      "metric": "kube_horizontalpodautoscaler_status_current_replicas",
+      "labels": {"horizontalpodautoscaler": "web-frontend", "namespace": "web-frontend"},
+      "value": 2
+    },
+    {
+      "timestamp": "2026-10-08T20:16:00Z",
+      "metric": "hpa_scaling_events_total",
+      "labels": {"horizontalpodautoscaler": "web-frontend", "result": "failed"},
+      "value": 15
+    },
+    {
+      "timestamp": "2026-10-08T20:16:30Z",
+      "metric": "metrics_server_health",
+      "labels": {"service": "metrics-server"},
+      "value": 0
+    },
+    {
+      "timestamp": "2026-10-08T20:17:00Z",
+      "metric": "http_request_duration_seconds",
+      "labels": {"service": "web-frontend", "quantile": "0.95"},
+      "value": 3.0
+    },
+    {
+      "timestamp": "2026-10-08T20:17:30Z",
+      "metric": "http_requests_total",
+      "labels": {"status": "503", "service": "web-frontend"},
+      "value": 2400
+    }
+  ]
+}

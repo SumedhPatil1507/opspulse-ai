@@ -1,0 +1,108 @@
+{
+  "incident_id": "INC-2026-003",
+  "incident_type": "CoreDNS_ResolutionTimeout",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "NetworkDiagnostics",
+      "DNSValidator",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for DNS timeout events",
+        "findings": [
+          "DNS query timeouts for multiple services (payment-service, api-gateway, redis-cache)",
+          "Upstream DNS server 8.8.8.8:53 failing with 10s timeout",
+          "CoreDNS cache miss rate at 95%",
+          "95th percentile query time exceeding 5s"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "step": 2,
+        "agent": "NetworkDiagnostics",
+        "action": "Analyze network connectivity",
+        "findings": [
+          "CoreDNS pods are healthy (Running state)",
+          "Cluster network is operational",
+          "Node-to-external DNS connectivity degraded",
+          "Network latency to 8.8.8.8 at 12.3s (unacceptable)"
+        ],
+        "confidence": 0.92
+      },
+      {
+        "step": 3,
+        "agent": "DNSValidator",
+        "action": "Validate CoreDNS configuration",
+        "findings": [
+          "CoreDNS ConfigMap configured to forward to 8.8.8.8",
+          "No local caching strategy configured",
+          "DNS stub domain not configured for internal services",
+          "Upstream DNS timeout set to 5s (too aggressive)"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: External DNS server 8.8.8.8 experiencing high latency",
+          "Contributing factor: CoreDNS forwarding all queries to external DNS",
+          "No internal DNS caching for cluster-local services",
+          "High cache miss rate indicates poor DNS design"
+        ],
+        "confidence": 0.93,
+        "root_cause": "CoreDNS forwarding all queries to slow external DNS server without caching"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl edit configmap coredns -n kube-system",
+            "rationale": "Update CoreDNS ConfigMap to add multiple upstream DNS servers",
+            "changes": [
+              "Add upstream DNS: 1.1.1.1 as secondary",
+              "Increase upstream timeout to 10s",
+              "Enable aggressive caching (cache 3600)"
+            ]
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: coredns\n  namespace: kube-system\ndata:\n  Corefile: |\n    .:53 {\n        errors\n        health\n        ready\n        kubernetes cluster.local in-addr.arpa ip6.arpa {\n            pods insecure\n            fallthrough in-addr.arpa ip6.arpa\n        }\n        prometheus :9153\n        forward . 8.8.8.8 1.1.1.1 {\n            policy sequential\n            timeout 10s\n        }\n        cache 3600\n        loop\n        reload\n        loadbalance\n    }\nEOF",
+            "rationale": "Apply optimized CoreDNS configuration with caching and multiple upstreams"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl rollout restart deployment coredns -n kube-system",
+            "rationale": "Restart CoreDNS to apply new configuration"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl patch node $(kubectl get nodes -o jsonpath='{.items[0].metadata.name}') -p '{\"spec\":{\"unschedulable\":false}}'",
+            "rationale": "Ensure nodes are schedulable for DNS pod replacement"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl patch ds coredns -n kube-system -p '{\"spec\":{\"template\":{\"spec\":{\"dnsPolicy\":\"Default\"}}}}'",
+            "rationale": "Consider changing DNS policy for better DNS resolution"
+          }
+        ],
+        "confidence": 0.91
+      }
+    ],
+    "overall_confidence": 0.93,
+    "remediation_validation": [
+      "Monitor DNS query latency (should drop below 100ms)",
+      "Verify cache hit rate increases above 80%",
+      "Test DNS resolution for internal and external services"
+    ]
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "incident_id": "INC-2026-004",
+  "incident_type": "PersistentVolumeDiskFull",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "StorageDiagnostics",
+      "DatabaseAuditor",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for disk space events",
+        "findings": [
+          "PostgreSQL primary disk at 98% capacity (490GB/500GB)",
+          "Write operations blocked due to 'No space left on device'",
+          "Autovacuum worker failed",
+          "Replication lag increasing to 10 minutes"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "step": 2,
+        "agent": "StorageDiagnostics",
+        "action": "Analyze PVC and storage metrics",
+        "findings": [
+          "PVC postgres-pvc at 98% utilization",
+          "PVC capacity: 500GB (no room for growth)",
+          "Storage class supports expansion: 'default'",
+          "Volume is Azure Disk Premium SSD"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "step": 3,
+        "agent": "DatabaseAuditor",
+        "action": "Audit PostgreSQL configuration and data",
+        "findings": [
+          "Database size: 475GB",
+          "WAL logs not being cleaned up",
+          "Autovacuum not running due to disk pressure",
+          "No retention policy for old data"
+        ],
+        "confidence": 0.93
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: Database growth exceeded PVC capacity",
+          "Contributing factor: WAL logs not rotated due to failed checkpoints",
+          "No automated storage expansion configured",
+          "Database maintenance (autovacuum) blocked by disk pressure"
+        ],
+        "confidence": 0.95,
+        "root_cause": "PersistentVolume full due to database growth exceeding allocated capacity"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl patch pvc postgres-pvc -n database -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"750Gi\"}}}}'",
+            "rationale": "Expand PVC from 500GB to 750GB (50% increase)"
+          },
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl exec -it postgres-primary-3a4b5-c6d7e -n database -- psql -c 'VACUUM FULL ANALYZE;'",
+            "rationale": "Force vacuum to reclaim space after expansion"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl exec -it postgres-primary-3a4b5-c6d7e -n database -- psql -c 'SELECT pg_rotate_logfile();'",
+            "rationale": "Rotate WAL logs to free up space"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl apply -f - <<EOF\napiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: azure-disk-expandable\nallowVolumeExpansion: true\nprovisioner: disk.csi.azure.com\nparameters:\n  skuName: Premium_LRS\nreclaimPolicy: Retain\nvolumeBindingMode: WaitForFirstConsumer\nEOF",
+            "rationale": "Ensure storage class supports volume expansion"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl exec -it postgres-primary-3a4b5-c6d7e -n database -- psql -c \"ALTER DATABASE payments SET vacuum_cost_delay = '10ms';\"",
+            "rationale": "Reduce vacuum cost delay to speed up cleanup"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl exec -it postgres-primary-3a4b5-c6d7e -n database -- psql -c \"DELETE FROM payments WHERE created_at < NOW() - INTERVAL '90 days';\"",
+            "rationale": "Archive old data to reduce storage footprint"
+          }
+        ],
+        "confidence": 0.94
+      }
+    ],
+    "overall_confidence": 0.95,
+    "remediation_validation": [
+      "Verify PVC expansion completed",
+      "Check disk usage dropped below 80%",
+      "Confirm PostgreSQL can perform write operations",
+      "Validate replication lag reduced to < 1 minute"
+    ]
+  }
+}

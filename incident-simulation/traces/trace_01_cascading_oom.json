@@ -1,0 +1,97 @@
+{
+  "incident_id": "INC-2026-001",
+  "incident_type": "Cascading_OOMKilled",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "MetricsCorrelator",
+      "TopologyMapper",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+      "action": "Parse log stream for OOMKilled events",
+      "findings": [
+        "Detected 5+ OOMKilled events across payment-processor pods",
+        "OOMKilled started with payment-processor-7f8b9-k2x4m at 10:15:25Z",
+        "Cascading pattern: payment-processor → redis-cache → api-gateway",
+        "Exit code 137 confirmed for all killed containers"
+      ],
+      "confidence": 0.95
+    },
+    {
+      "step": 2,
+      "agent": "MetricsCorrelator",
+      "action": "Correlate memory metrics with OOM events",
+      "findings": [
+        "Memory usage spiked from 7.5GB to 8.3GB before first OOM",
+        "Node memory available dropped to 4GB after OOM events",
+        "Pod restart rate: 5 restarts for payment-processor-7f8b9-k2x4m",
+        "CPU usage at 98.5% indicates memory pressure causing CPU thrashing"
+      ],
+      "confidence": 0.92
+    },
+    {
+      "step": 3,
+      "agent": "TopologyMapper",
+      "action": "Map service dependencies and resource allocation",
+      "findings": [
+        "payment-processor → redis-cache (dependency chain)",
+        "api-gateway depends on payment-processor (upstream)",
+        "All pods share same node pool: aks-worker-01, -02, -03",
+        "Memory limits: payment-app=8GB, redis=4GB, gateway=2GB"
+      ],
+      "confidence": 0.98
+    },
+    {
+      "step": 4,
+      "agent": "RootCauseAnalyzer",
+      "action": "Identify root cause using combined evidence",
+      "findings": [
+        "Root cause: Payment transaction spike caused memory exhaustion",
+        "Memory limits too low for peak load (8GB insufficient)",
+        "Cascading failure: Redis OOM caused payment-processor to fallback to direct connections, increasing memory usage",
+        "Node memory pressure triggered eviction chain"
+      ],
+      "confidence": 0.94,
+      "root_cause": "Insufficient memory limits combined with unexpected traffic spike"
+    },
+    {
+      "step": 5,
+      "agent": "RemediationAdvisor",
+      "action": "Generate remediation commands",
+      "recommendations": [
+        {
+          "priority": "CRITICAL",
+          "command": "kubectl set resources deployment payment-processor --limits=memory=12Gi --requests=memory=8Gi -n payment-service",
+          "rationale": "Increase memory limit to handle peak loads with 50% headroom"
+        },
+        {
+          "priority": "HIGH",
+          "command": "kubectl set resources deployment redis-cache --limits=memory=6Gi --requests=memory=4Gi -n payment-service",
+          "rationale": "Increase Redis memory to prevent OOM during cache pressure"
+        },
+        {
+          "priority": "HIGH",
+          "command": "kubectl autoscale deployment payment-processor --min=3 --max=10 --cpu-percent=70 -n payment-service",
+          "rationale": "Enable HPA to scale horizontally under load"
+        },
+        {
+          "priority": "MEDIUM",
+          "command": "kubectl apply -f - <<EOF\napiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: payment-processor-pdb\n  namespace: payment-service\nspec:\n  minAvailable: 2\n  selector:\n    matchLabels:\n      app: payment-processor\nEOF",
+          "rationale": "Ensure minimum replicas during scaling events"
+        }
+      ],
+      "confidence": 0.91
+    }
+  ],
+  "overall_confidence": 0.94,
+  "remediation_validation": [
+    "Monitor memory usage for 30 minutes after remediation",
+    "Verify no OOMKilled events in logs",
+    "Confirm HPA scaling is functional"
+  ]
+}

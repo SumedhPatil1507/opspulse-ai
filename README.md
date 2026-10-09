@@ -18,8 +18,6 @@
 
 [**Live Dashboard**](#-streamlit-dashboard) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**API Docs**](#-api-reference)
 
-> 📦 **Repository:** https://github.com/sanjeevrpatil11-gif/opspulse-ai
-
 </div>
 
 ---

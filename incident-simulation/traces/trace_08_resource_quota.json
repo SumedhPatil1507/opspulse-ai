@@ -1,0 +1,109 @@
+{
+  "incident_id": "INC-2026-008",
+  "incident_type": "ResourceQuotaExceeded",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "QuotaAuditor",
+      "ResourceAnalyzer",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for quota exceeded events",
+        "findings": [
+          "Resource quota exceeded for CPU: requested 500m, used 9500m, limited 10000m",
+          "Resource quota exceeded for memory: used 19Gi, limited 20Gi",
+          "Resource quota exceeded for services: used 9, limited 10",
+          "Resource quota exceeded for configmaps: used 49, limited 50"
+        ],
+        "confidence": 0.98
+      },
+      {
+        "step": 2,
+        "agent": "QuotaAuditor",
+        "action": "Audit resource quotas in namespace",
+        "findings": [
+          "CPU quota: 10000m (95% utilized)",
+          "Memory quota: 20Gi (95% utilized)",
+          "Services quota: 10 (90% utilized)",
+          "ConfigMaps quota: 50 (98% utilized)",
+          "PVC quota: 10 (90% utilized)"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "step": 3,
+        "agent": "ResourceAnalyzer",
+        "action": "Analyze resource allocation and usage",
+        "findings": [
+          "Multiple workloads in development namespace",
+          "Dev-service deployment requires 500m CPU and 1Gi memory per replica",
+          "No horizontal scaling configured",
+          "Quota limits too restrictive for development workload"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: Resource quota limits too low for development needs",
+          "Contributing factor: Multiple dev workloads sharing same namespace",
+          "No resource cleanup of unused resources",
+          "Quota not adjusted for workload growth"
+        ],
+        "confidence": 0.95,
+        "root_cause": "Resource quota limits insufficient for development namespace workload"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl patch resourcequota compute-resources -n development -p '{\"spec\":{\"hard\":{\"cpu\":\"20000m\",\"memory\":\"40Gi\"}}}'",
+            "rationale": "Double CPU and memory quotas to accommodate development workloads"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl patch resourcequota object-counts -n development -p '{\"spec\":{\"hard\":{\"services\":\"20\",\"configmaps\":\"100\",\"persistentvolumeclaims\":\"20\"}}}'",
+            "rationale": "Increase object count quotas for services, configmaps, and PVCs"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ResourceQuota\nmetadata:\n  name: compute-resources\n  namespace: development\nspec:\n  hard:\n    requests.cpu: \"20000m\"\n    requests.memory: 40Gi\n    limits.cpu: \"40000m\"\n    limits.memory: 80Gi\nEOF",
+            "rationale": "Apply updated resource quota with request and limit separation"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl get configmap -n development --sort-by=.metadata.creationTimestamp | head -n 20",
+            "rationale": "List old configmaps for cleanup review"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl get service -n development --sort-by=.metadata.creationTimestamp | head -n 20",
+            "rationale": "List old services for cleanup review"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl create namespace development-new",
+            "rationale": "Consider splitting development workloads into multiple namespaces"
+          }
+        ],
+        "confidence": 0.93
+      }
+    ],
+    "overall_confidence": 0.96,
+    "remediation_validation": [
+      "Verify new resource quota limits applied",
+      "Check dev-service deployment scales successfully",
+      "Monitor resource utilization to ensure adequate headroom"
+    ]
+  }
+}

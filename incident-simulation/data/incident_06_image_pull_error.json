@@ -1,0 +1,138 @@
+{
+  "incident_id": "INC-2026-006",
+  "incident_type": "ImagePullBackOff_RegistryUnavailable",
+  "timestamp_start": "2026-10-08T16:15:00Z",
+  "timestamp_end": "2026-10-08T16:30:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "order-service",
+  "affected_pods": [
+    "order-processor-5a6b7-c8d9e",
+    "order-processor-5a6b7-e0f1g",
+    "order-processor-5a6b7-h2i3j"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T16:15:15.123Z",
+      "level": "INFO",
+      "component": "kube-controller-manager",
+      "message": "Detected new image version for order-processor: v3.4.2"
+    },
+    {
+      "timestamp": "2026-10-08T16:15:20.456Z",
+      "level": "INFO",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "order-processor-5a6b7-c8d9e",
+      "message": "Pulling image registry.azurecr.io/order-service:v3.4.2"
+    },
+    {
+      "timestamp": "2026-10-08T16:15:30.789Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "order-processor-5a6b7-c8d9e",
+      "message": "Failed to pull image registry.azurecr.io/order-service:v3.4.2: rpc error: code = Unknown desc = Error response from daemon: Get https://registry.azurecr.io/v2/: dial tcp: lookup registry.azurecr.io on 10.0.0.10:53: no such host"
+    },
+    {
+      "timestamp": "2026-10-08T16:15:35.123Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "order-processor-5a6b7-c8d9e",
+      "message": "Back-off pulling image registry.azurecr.io/order-service:v3.4.2"
+    },
+    {
+      "timestamp": "2026-10-08T16:15:40.456Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-02",
+      "pod": "order-processor-5a6b7-e0f1g",
+      "message": "Failed to pull image registry.azurecr.io/order-service:v3.4.2: connection refused"
+    },
+    {
+      "timestamp": "2026-10-08T16:15:45.789Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-03",
+      "pod": "order-processor-5a6b7-h2i3j",
+      "message": "Failed to pull image registry.azurecr.io/order-service:v3.4.2: TLS handshake timeout"
+    },
+    {
+      "timestamp": "2026-10-08T16:16:00.123Z",
+      "level": "WARNING",
+      "component": "kube-controller-manager",
+      "message": "Pod order-processor-5a6b7-c8d9e in ImagePullBackOff state"
+    },
+    {
+      "timestamp": "2026-10-08T16:16:15.456Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "order-processor-5a6b7-c8d9e",
+      "message": "Image pull back-off: 10 consecutive failures"
+    },
+    {
+      "timestamp": "2026-10-08T16:16:30.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: ImagePullBackOff - order-processor deployment has 0/3 ready replicas"
+    },
+    {
+      "timestamp": "2026-10-08T16:17:00.123Z",
+      "level": "ERROR",
+      "component": "api-gateway",
+      "message": "Order service unavailable - returning 503 for /order/* endpoints"
+    },
+    {
+      "timestamp": "2026-10-08T16:17:30.456Z",
+      "level": "WARNING",
+      "component": "containerd",
+      "node": "aks-worker-01",
+      "message": "Container registry connectivity test failed: network unreachable"
+    },
+    {
+      "timestamp": "2026-10-08T16:18:00.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: ContainerRegistryUnreachable - ACR registry.azurecr.io not accessible from cluster"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T16:15:00Z",
+      "metric": "kube_deployment_status_replicas_available",
+      "labels": {"deployment": "order-processor", "namespace": "order-service"},
+      "value": 3
+    },
+    {
+      "timestamp": "2026-10-08T16:16:00Z",
+      "metric": "kube_deployment_status_replicas_available",
+      "labels": {"deployment": "order-processor", "namespace": "order-service"},
+      "value": 0
+    },
+    {
+      "timestamp": "2026-10-08T16:16:30Z",
+      "metric": "kube_pod_status_phase",
+      "labels": {"pod": "order-processor-5a6b7-c8d9e", "phase": "ImagePullBackOff"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T16:17:00Z",
+      "metric": "kube_pod_container_status_waiting_reason",
+      "labels": {"pod": "order-processor-5a6b7-c8d9e", "reason": "ImagePullBackOff"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T16:17:30Z",
+      "metric": "upstream_request_failure_count",
+      "labels": {"service": "api-gateway", "upstream": "order-service"},
+      "value": 2100
+    },
+    {
+      "timestamp": "2026-10-08T16:18:00Z",
+      "metric": "http_requests_total",
+      "labels": {"status": "503", "path": "/order/create"},
+      "value": 1560
+    }
+  ]
+}

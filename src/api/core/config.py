@@ -196,6 +196,72 @@ class Settings(BaseSettings):
         description="Prometheus metric name namespace prefix.",
     )
 
+    # ── Kubernetes & HITL Executor ─────────────────────────────────────────────
+    JWT_SECRET_KEY: str = Field(
+        default="",
+        description=(
+            "Secret key for signing and verifying HITL action JWT tokens. "
+            "Set a unique secret of at least 32 characters before enabling execution."
+        ),
+    )
+    JWT_ALGORITHM: str = Field(
+        default="HS256",
+        description="Algorithm used for JWT signature verification.",
+    )
+    K8S_KUBECONFIG_PATH: str | None = Field(
+        default=None,
+        description=(
+            "Path to kubeconfig file; None uses in-cluster config or the "
+            "default ~/.kube/config."
+        ),
+    )
+    HELM_BINARY_PATH: str = Field(
+        default="helm",
+        description="Path or command name for the Helm CLI binary.",
+    )
+
+    # ── Kafka telemetry event streaming ────────────────────────────────────────
+    KAFKA_BOOTSTRAP_SERVERS: str = Field(
+        default="localhost:9092",
+        description="Comma-separated Kafka broker addresses.",
+    )
+    KAFKA_GROUP_ID: str = Field(
+        default="opspulse-telemetry-consumer",
+        description="Kafka consumer group ID.",
+    )
+    KAFKA_LOGS_TOPIC: str = Field(
+        default="k8s.pod.logs",
+        description="Kafka topic for Kubernetes pod log events.",
+    )
+    KAFKA_ALERTS_TOPIC: str = Field(
+        default="k8s.system.alerts",
+        description="Kafka topic for Kubernetes system alert events.",
+    )
+    KAFKA_DLQ_TOPIC: str = Field(
+        default="k8s.telemetry.dlq",
+        description="Kafka Dead Letter Queue (DLQ) topic for failed records.",
+    )
+    KAFKA_AUTO_OFFSET_RESET: str = Field(
+        default="earliest",
+        description="Kafka auto.offset.reset setting (earliest | latest).",
+    )
+    KAFKA_ENABLE_AUTO_COMMIT: bool = Field(
+        default=False,
+        description=(
+            "Manual Kafka offset commit control. Must remain False — offsets "
+            "are only committed after successful LangGraph triage (or DLQ "
+            "quarantine) to guarantee at-least-once processing."
+        ),
+    )
+    KAFKA_ERROR_SPIKE_THRESHOLD: int = Field(
+        default=5,
+        description="Errors within the sliding window required to trigger RCA.",
+    )
+    KAFKA_ERROR_SPIKE_WINDOW_SECONDS: int = Field(
+        default=60,
+        description="Sliding window duration in seconds for error spike detection.",
+    )
+
     @field_validator("REDIS_URL", mode="before")
     @classmethod
     def _coerce_redis_url(cls, v: object) -> object:

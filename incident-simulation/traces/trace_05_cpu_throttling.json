@@ -1,0 +1,108 @@
+{
+  "incident_id": "INC-2026-005",
+  "incident_type": "CPU_Throttling_PerformanceDegradation",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "MetricsCorrelator",
+      "ResourceAnalyzer",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for CPU throttling events",
+        "findings": [
+          "CPU throttling active on api-frontend pods (45% of CPU time throttled)",
+          "Request latency increased: p95 at 2500ms (baseline: 200ms)",
+          "Backend experiencing CPU starvation and database timeouts",
+          "Cluster CPU utilization at 85%"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "step": 2,
+        "agent": "MetricsCorrelator",
+        "action": "Correlate CPU metrics with throttling",
+        "findings": [
+          "Container CPU usage at 950m against 1000m limit",
+          "CPU throttling rate at 45% (critical threshold: 30%)",
+          "Throttled periods: 13500 out of 30000 total periods",
+          "Node CPU idle time at 8% (near capacity)"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "step": 3,
+        "agent": "ResourceAnalyzer",
+        "action": "Analyze resource allocation and requests",
+        "findings": [
+          "CPU request: 500m, limit: 1000m (2:1 ratio)",
+          "Pods consistently hitting CPU limits",
+          "No horizontal scaling configured (HPA disabled)",
+          "Node capacity: 4 cores, utilization at 92%"
+        ],
+        "confidence": 0.93
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: CPU limits too low for actual workload demand",
+          "Contributing factor: No horizontal scaling to distribute load",
+          "CPU request/limit ratio not optimized for burst workloads",
+          "Node capacity insufficient for current workload"
+        ],
+        "confidence": 0.95,
+        "root_cause": "CPU limits too restrictive combined with lack of horizontal scaling"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl set resources deployment api-frontend --limits=cpu=2000m --requests=cpu=1000m -n api-service",
+            "rationale": "Double CPU limit to 2000m with 1000m request for better burst handling"
+          },
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl set resources deployment api-backend --limits=cpu=4000m --requests=cpu=2000m -n api-service",
+            "rationale": "Increase backend CPU limits to prevent starvation"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl autoscale deployment api-frontend --min=3 --max=10 --cpu-percent=60 -n api-service",
+            "rationale": "Enable HPA to scale horizontally at 60% CPU utilization"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl autoscale deployment api-backend --min=2 --max=6 --cpu-percent=60 -n api-service",
+            "rationale": "Enable HPA for backend to handle increased load"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl apply -f - <<EOF\napiVersion: scheduling.k8s.io/v1\nkind: PriorityClass\nmetadata:\n  name: high-priority-api\nvalue: 1000\nglobalDefault: false\ndescription: \"High priority for API services\"\nEOF",
+            "rationale": "Create priority class to ensure API pods are not evicted"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl apply -f - <<EOF\napiVersion: policy/v1\nkind: PodDisruptionBudget\nmetadata:\n  name: api-frontend-pdb\n  namespace: api-service\nspec:\n  minAvailable: 2\n  selector:\n    matchLabels:\n      app: api-frontend\nEOF",
+            "rationale": "Ensure minimum replicas during scaling events"
+          }
+        ],
+        "confidence": 0.92
+      }
+    ],
+    "overall_confidence": 0.95,
+    "remediation_validation": [
+      "Monitor CPU throttling rate (should drop below 10%)",
+      "Verify p95 latency returns to baseline (< 300ms)",
+      "Confirm HPA scaling is functional"
+    ]
+  }
+}

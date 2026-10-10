@@ -1,0 +1,152 @@
+{
+  "incident_id": "INC-2026-001",
+  "incident_type": "Cascading_OOMKilled",
+  "timestamp_start": "2026-10-08T10:15:00Z",
+  "timestamp_end": "2026-10-08T10:25:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "payment-service",
+  "affected_pods": [
+    "payment-processor-7f8b9-k2x4m",
+    "payment-processor-7f8b9-l5p9n",
+    "payment-processor-7f8b9-m8q3r",
+    "redis-cache-5c6d7-t4v5w",
+    "api-gateway-9a8b7-x3y4z"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T10:15:23.456Z",
+      "level": "INFO",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "message": "Memory cgroup stats: usage=8192MB, limit=8192MB, failcnt=0"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:24.789Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "message": "Eviction manager: attempting to reclaim memory: current_usage=8192MB, capacity=16384MB, threshold=12288MB"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:25.123Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "payment-processor-7f8b9-k2x4m",
+      "container": "payment-app",
+      "message": "Kill container payment-app in pod payment-processor-7f8b9-k2x4m with OOMKilled"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:25.456Z",
+      "level": "INFO",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "payment-processor-7f8b9-k2x4m",
+      "message": "Container payment-app OOMKilled, exit code 137"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:26.789Z",
+      "level": "WARNING",
+      "component": "kube-controller-manager",
+      "message": "Detected pod payment-processor-7f8b9-k2x4m in CrashLoopBackOff state"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:30.123Z",
+      "level": "INFO",
+      "component": "payment-app",
+      "pod": "payment-processor-7f8b9-l5p9n",
+      "message": "Increased memory allocation to handle spike in payment transactions"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:35.456Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-02",
+      "pod": "payment-processor-7f8b9-l5p9n",
+      "container": "payment-app",
+      "message": "Kill container payment-app in pod payment-processor-7f8b9-l5p9n with OOMKilled"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:40.789Z",
+      "level": "WARNING",
+      "component": "payment-app",
+      "pod": "payment-processor-7f8b9-m8q3r",
+      "message": "Redis connection pool exhausted, falling back to direct connection"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:45.123Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-01",
+      "pod": "redis-cache-5c6d7-t4v5w",
+      "container": "redis",
+      "message": "Kill container redis in pod redis-cache-5c6d7-t4v5w with OOMKilled"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:50.456Z",
+      "level": "CRITICAL",
+      "component": "api-gateway",
+      "pod": "api-gateway-9a8b7-x3y4z",
+      "message": "Payment service unavailable - 503 Service Unavailable"
+    },
+    {
+      "timestamp": "2026-10-08T10:15:55.789Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-03",
+      "pod": "api-gateway-9a8b7-x3y4z",
+      "container": "gateway",
+      "message": "Kill container gateway in pod api-gateway-9a8b7-x3y4z with OOMKilled"
+    },
+    {
+      "timestamp": "2026-10-08T10:16:00.123Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: HighMemoryUsage (99%) on node aks-worker-01"
+    },
+    {
+      "timestamp": "2026-10-08T10:16:05.456Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: PodOOMKilled - payment-processor pods experiencing cascading failures"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T10:15:00Z",
+      "metric": "container_memory_usage_bytes",
+      "labels": {"pod": "payment-processor-7f8b9-k2x4m", "container": "payment-app"},
+      "value": 7516192768
+    },
+    {
+      "timestamp": "2026-10-08T10:15:15Z",
+      "metric": "container_memory_usage_bytes",
+      "labels": {"pod": "payment-processor-7f8b9-k2x4m", "container": "payment-app"},
+      "value": 8388608000
+    },
+    {
+      "timestamp": "2026-10-08T10:15:30Z",
+      "metric": "node_memory_MemAvailable_bytes",
+      "labels": {"node": "aks-worker-01"},
+      "value": 4294967296
+    },
+    {
+      "timestamp": "2026-10-08T10:15:45Z",
+      "metric": "kube_pod_status_phase",
+      "labels": {"pod": "payment-processor-7f8b9-k2x4m", "phase": "Failed"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T10:16:00Z",
+      "metric": "rate(kube_pod_container_status_restarts_total)",
+      "labels": {"pod": "payment-processor-7f8b9-k2x4m"},
+      "value": 5
+    },
+    {
+      "timestamp": "2026-10-08T10:16:15Z",
+      "metric": "container_cpu_usage_seconds_total",
+      "labels": {"pod": "payment-processor-7f8b9-l5p9n", "container": "payment-app"},
+      "value": 98.5
+    }
+  ]
+}

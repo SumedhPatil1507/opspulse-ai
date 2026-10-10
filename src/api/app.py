@@ -27,9 +27,14 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from prometheus_client import make_asgi_app
+
 from src.api.core.config import get_settings
 from src.api.core.logging_config import configure_logging
 from src.api.routes.alerts import router as alerts_router
+from src.api.routes.logs import router as logs_router
+from src.api.routes.runbooks import router as runbooks_router
+from src.metrics import make_metrics_app
 
 logger = logging.getLogger(__name__)
 
@@ -138,6 +143,12 @@ def create_app() -> FastAPI:
 
     # ── Routers ────────────────────────────────────────────────────────────
     application.include_router(alerts_router)
+    application.include_router(runbooks_router)
+    application.include_router(logs_router)
+
+    # ── Prometheus metrics endpoint ───────────────────────────────────────
+    metrics_app = make_metrics_app()
+    application.mount("/metrics", metrics_app)
 
     # ── Health check (no auth required) ───────────────────────────────────
     @application.get(

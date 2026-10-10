@@ -1,0 +1,108 @@
+{
+  "incident_id": "INC-2026-006",
+  "incident_type": "ImagePullBackOff_RegistryUnavailable",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "NetworkDiagnostics",
+      "RegistryValidator",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for image pull errors",
+        "findings": [
+          "Image pull failed for registry.azurecr.io/order-service:v3.4.2",
+          "DNS resolution error: 'no such host' for registry.azurecr.io",
+          "Connection refused and TLS handshake timeout errors",
+          "All 3 order-processor pods in ImagePullBackOff state"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "step": 2,
+        "agent": "NetworkDiagnostics",
+        "action": "Analyze network connectivity to registry",
+        "findings": [
+          "Cluster cannot resolve registry.azurecr.io",
+          "CoreDNS functioning for internal services",
+          "External DNS resolution failing for ACR domain",
+          "Network unreachable from worker nodes to ACR"
+        ],
+        "confidence": 0.94
+      },
+      {
+        "step": 3,
+        "agent": "RegistryValidator",
+        "action": "Validate ACR configuration and authentication",
+        "findings": [
+          "ACR registry.azurecr.io is accessible from outside cluster",
+          "ImagePullSecret exists in order-service namespace",
+          "ACR integration with AKS may be misconfigured",
+          "No custom DNS server configured for ACR resolution"
+        ],
+        "confidence": 0.92
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: DNS resolution failure for ACR domain",
+          "Contributing factor: ACR DNS not resolving from cluster nodes",
+          "Possible cause: Azure Private Link or VNet DNS misconfiguration",
+          "Alternative cause: ACR firewall blocking cluster IP range"
+        ],
+        "confidence": 0.91,
+        "root_cause": "DNS resolution failure for Azure Container Registry from cluster"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: azure-resolver\n  namespace: kube-system\ndata:\n  Corefile: |\n    azurecr.io:53 {\n        errors\n        cache 30\n        forward 168.63.129.16  # Azure DNS\n    }\nEOF",
+            "rationale": "Add Azure DNS forwarder for ACR domain resolution"
+          },
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl patch configmap coredns -n kube-system --type merge -p '{\"data\":{\"Corefile\":\".:53 {\\n    errors\\n    health\\n    ready\\n    kubernetes cluster.local in-addr.arpa ip6.arpa {\\n        pods insecure\\n        fallthrough in-addr.arpa ip6.arpa\\n    }\\n    prometheus :9153\\n    forward . /etc/resolv.conf\\n    cache 30\\n    loop\\n    reload\\n    loadbalance\\n}\\nazurecr.io:53 {\\n    forward 168.63.129.16\\n    cache 30\\n}\\n\"}}'",
+            "rationale": "Update CoreDNS to forward ACR queries to Azure DNS"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl rollout restart deployment coredns -n kube-system",
+            "rationale": "Restart CoreDNS to apply new configuration"
+          },
+          {
+            "priority": "HIGH",
+            "command": "az aks update --resource-group <rg-name> --name <cluster-name> --attach-acr <acr-id>",
+            "rationale": "Re-attach ACR to AKS to refresh authentication and DNS"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl apply -f - <<EOF\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: allow-registry-egress\n  namespace: order-service\nspec:\n  podSelector: {}\n  egress:\n  - to:\n    - namespaceSelector: {}\n    ports:\n    - protocol: TCP\n      port: 443\nEOF",
+            "rationale": "Ensure network policy allows egress to ACR"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl patch deployment order-processor -n order-service -p '{\"spec\":{\"template\":{\"spec\":{\"imagePullSecrets\":[{\"name\":\"acr-secret\"}]}}}}'",
+            "rationale": "Ensure image pull secret is properly configured"
+          }
+        ],
+        "confidence": 0.90
+      }
+    ],
+    "overall_confidence": 0.93,
+    "remediation_validation": [
+      "Test DNS resolution for registry.azurecr.io from cluster",
+      "Verify image pull succeeds for order-service:v3.4.2",
+      "Confirm pods transition to Running state"
+    ]
+  }
+}

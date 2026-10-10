@@ -1,0 +1,104 @@
+{
+  "incident_id": "INC-2026-007",
+  "incident_type": "NetworkPolicyConnectionBlocked",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "NetworkPolicyAuditor",
+      "ConnectivityValidator",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for network policy events",
+        "findings": [
+          "Network policy 'deny-all-egress' applied to microservices namespace",
+          "98% of connections blocked in microservices namespace",
+          "Service-to-service communication failures",
+          "External API calls blocked by network policy"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "step": 2,
+        "agent": "NetworkPolicyAuditor",
+        "action": "Audit network policies in namespace",
+        "findings": [
+          "Policy 'deny-all-egress' blocks all egress traffic",
+          "No allow rules for inter-service communication",
+          "No allow rules for external DNS resolution",
+          "Policy was likely applied by mistake or misconfiguration"
+        ],
+        "confidence": 0.98
+      },
+      {
+        "step": 3,
+        "agent": "ConnectivityValidator",
+        "action": "Validate connectivity requirements",
+        "findings": [
+          "Service-a needs to communicate with service-b (port 8080)",
+          "Service-b needs to access external API (https://api.external.com)",
+          "All services need DNS resolution (CoreDNS on UDP 53)",
+          "Services need database access (different namespace)"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: Overly restrictive network policy 'deny-all-egress'",
+          "Policy was applied without necessary allow rules",
+          "No gradual rollout or testing of network policy changes",
+          "Lack of network policy validation before application"
+        ],
+        "confidence": 0.96,
+        "root_cause": "Misconfigured network policy blocking all egress traffic"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl delete networkpolicy deny-all-egress -n microservices",
+            "rationale": "Remove overly restrictive network policy"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl apply -f - <<EOF\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: allow-microservices-traffic\n  namespace: microservices\nspec:\n  podSelector: {}\n  policyTypes:\n  - Ingress\n  - Egress\n  ingress:\n  - from:\n    - namespaceSelector:\n        matchLabels:\n          name: microservices\n  egress:\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          name: microservices\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          name: kube-system\n    ports:\n    - protocol: UDP\n      port: 53\n  - to:\n    - ipBlock:\n        cidr: 0.0.0.0/0\n        except:\n        - 10.0.0.0/8\n    ports:\n    - protocol: TCP\n      port: 443\nEOF",
+            "rationale": "Apply permissive network policy allowing internal and necessary external traffic"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl apply -f - <<EOF\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata:\n  name: allow-database-access\n  namespace: microservices\nspec:\n  podSelector:\n    matchLabels:\n      app: service-b\n  policyTypes:\n  - Egress\n  egress:\n  - to:\n    - namespaceSelector:\n        matchLabels:\n          name: database\n    ports:\n    - protocol: TCP\n      port: 5432\nEOF",
+            "rationale": "Allow database access from service-b"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: microservices\n  labels:\n    name: microservices\nEOF",
+            "rationale": "Ensure namespace labels are correct for policy matching"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl get networkpolicy -n microservices -o yaml > network-policy-backup.yaml",
+            "rationale": "Backup network policies before changes"
+          }
+        ],
+        "confidence": 0.94
+      }
+    ],
+    "overall_confidence": 0.96,
+    "remediation_validation": [
+      "Verify service-to-service communication restored",
+      "Test external API connectivity",
+      "Confirm DNS resolution working",
+      "Check network policy drop rate dropped to 0"
+    ]
+  }
+}

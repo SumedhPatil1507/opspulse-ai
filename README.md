@@ -1,442 +1,440 @@
 <div align="center">
 
-# 🔥 OpsPulse AI
+# ⚡ OpsPulse AI
 
-### Autonomous Incident Remediation Platform
+### Autonomous Kubernetes Incident Remediation Platform · Real-Time Kafka Telemetry · HITL Security Gate
 
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![LangGraph](https://img.shields.io/badge/LangGraph-0.2-FF6B35?style=for-the-badge&logo=langchain&logoColor=white)](https://langchain-ai.github.io/langgraph)
+[![Kafka](https://img.shields.io/badge/Apache_Kafka-Confluent-231F20?style=for-the-badge&logo=apachekafka&logoColor=white)](https://kafka.apache.org)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Client_v30-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)
 [![Qdrant](https://img.shields.io/badge/Qdrant-1.11-DC143C?style=for-the-badge&logo=qdrant&logoColor=white)](https://qdrant.tech)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![Docker](https://img.shields.io/badge/Docker-SDK-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://docker.com)
-[![Prometheus](https://img.shields.io/badge/Prometheus-Metrics-E6522C?style=for-the-badge&logo=prometheus&logoColor=white)](https://prometheus.io)
+[![Tests](https://img.shields.io/badge/Tests-116_Passed-34D399?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
-[![GitHub](https://img.shields.io/badge/GitHub-sanjeevrpatil11--gif-181717?style=for-the-badge&logo=github)](https://github.com/sanjeevrpatil11-gif/opspulse-ai)
+[![GitHub](https://img.shields.io/badge/GitHub-SumedhPatil1507-181717?style=for-the-badge&logo=github)](https://github.com/SumedhPatil1507/opspulse-ai)
 
-**OpsPulse AI** is a production-grade, agentic incident response system that ingests alert payloads, retrieves relevant runbooks via hybrid RAG, plans remediations with LLMs, and executes safe container operations — all with human-in-the-loop approval for high-risk actions.
+**OpsPulse AI** is a production-grade, agentic SRE incident response system that continuously streams cluster telemetry from Kafka, detects anomalous error spikes, retrieves relevant runbooks via hybrid RAG, plans remediations with LLMs, and safely executes Kubernetes cluster actions (`AppsV1Api`, `CoreV1Api`, `Helm`) behind Human-In-The-Loop (HITL) and cryptographic JWT authorization gates.
 
-[**Live Dashboard**](#-streamlit-dashboard) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**API Docs**](#-api-reference)
+[**Live Dashboard**](#-interactive-streamlit-command-center) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Kubernetes Action Engine**](#-kubernetes-hitl-action-engine) · [**Kafka Streaming & DLQ**](#-real-time-kafka-event-streaming) · [**Benchmark Suite**](#-10-benchmark-kubernetes-chaos-scenarios)
+
+> 📦 **Repository:** https://github.com/SumedhPatil1507/opspulse-ai
 
 </div>
 
 ---
 
-## ✨ Features
+## ✨ Key Capabilities
 
-| Layer | Capability |
-|---|---|
-| 🚨 **Alert Ingestion** | FastAPI `/api/v1/alerts/ingest` with Pydantic v2 validation → 202 Accepted + Celery task |
-| 🔍 **Hybrid RAG** | Dense (all-MiniLM-L6-v2) + BM25 sparse retrieval over Markdown runbooks → cross-encoder re-ranking |
-| 🧠 **LangGraph Agent** | 6-node state machine: ParseLog → RetrieveRunbook → PlanRemediation → HITLCheck → Execute |
-| 🤖 **LLM Planning** | Groq (llama3-70b) primary, Claude 3.5 Sonnet fallback → structured JSON tool parameters |
-| 🙋 **HITL Approval** | HIGH/CRITICAL risk routes to Slack Block Kit webhook with ✅/❌ buttons |
-| 🐳 **Safe Sandbox** | Docker SDK: inspect, tail 100 log lines, graceful restart — allowlisted, no destructive ops |
-| 📊 **Prometheus** | 8 metrics (counters + histograms) with labels; ASGI `/metrics` endpoint |
-| 📈 **Streamlit** | Interactive Plotly dashboard: timeline, heatmap, HITL funnel, latency histograms, scatter |
+|| Subsystem | Enterprise Capability |
+||---|---|
+|| 📡 **Real-time Kafka Streaming** | Continuous consumer for `k8s.pod.logs` & `k8s.system.alerts` with manual offset commit (`enable.auto.commit=False`) and Dead Letter Queue (`k8s.telemetry.dlq`) poison-pill quarantine. |
+|| 📈 **Sliding-Window Spike Detector** | Stateful sliding-window error frequency tracker triggering diagnostic agents upon exceeding error burst thresholds. |
+|| 🔍 **Hybrid RAG Retrieval** | Dense (`all-MiniLM-L6-v2`) + Sparse BM25 retrieval over Markdown runbooks with Cross-Encoder re-ranking (`ms-marco-MiniLM-L-6-v2`). |
+|| 🧠 **LangGraph Multi-Agent RCA** | 7-node state machine: `ParseLogNode` → `RetrieveRunbookNode` → `PlanRemediationNode` → `HITLCheckNode` → `AutoExecute / AwaitApproval` → `ExecuteActionNode` (JWT-gated). |
+|| 🛡️ **Kubernetes Action Engine** | Native `AppsV1Api` & `CoreV1Api` remediation executor: `restart_deployment()`, `scale_deployment()`, `rollback_helm_release()`, and read-only `fetch_pod_logs()`. |
+|| 🔐 **Dual Safety Gates** | Enforces cryptographically verified JWT tokens signed with `ROLE_SRE_ADMIN` and explicit, non-replayable `approval_id` from the HITL Review Queue. |
+|| 🧪 **Chaos Benchmark Suite** | 10 realistic Kubernetes cluster incident scenarios (`INC-001` to `INC-010`) with automated diagnostic evaluation scorecard. |
+|| 📊 **Interactive Streamlit Cockpit** | Live SRE operations cockpit with real-time telemetry charts, chaos scenario simulator, HITL review queue manager, and DLQ inspector. |
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-                          ┌──────────────────────────────────────────────────────┐
-                          │                  OpsPulse AI                         │
-                          │                                                      │
-  Monitoring Systems      │   FastAPI (ASGI)          LangGraph State Machine    │
-  ┌──────────────┐        │  ┌─────────────────┐     ┌───────────────────────┐  │
-  │ Prometheus   │◄───────┼──│  GET /metrics   │     │  [START]              │  │
-  │ AlertManager │        │  │  POST /ingest   │     │      │                │  │
-  │ Grafana      │        │  └────────┬────────┘     │      ▼                │  │
-  └──────────────┘        │           │               │  parse_log_node       │  │
-                          │           ▼               │      │                │  │
-  Slack Workspace         │   ┌───────────────┐      │      ▼                │  │
-  ┌──────────────┐        │   │  Celery Task  │      │  retrieve_runbook     │  │
-  │  #ops-alerts │◄───────┼───│  Queue        │─────►│      │                │  │
-  │  HITL Buttons│        │   │  (Redis)      │      │      ▼                │  │
-  └──────────────┘        │   └───────────────┘      │  plan_remediation     │  │
-                          │                           │  (Groq / Claude)     │  │
-  Docker Engine           │   ┌───────────────┐      │      │                │  │
-  ┌──────────────┐        │   │  Qdrant       │◄─────│      ▼                │  │
-  │  Containers  │◄───────┼───│  Vector DB    │      │  hitl_check_node      │  │
-  │  (sandbox)   │        │   │  (runbooks)   │      │  ┌───┴─────────┐      │  │
-  └──────────────┘        │   └───────────────┘      │  │             │      │  │
-                          │                           │  ▼             ▼      │  │
-  Streamlit               │   ┌───────────────┐      │ auto_execute await_   │  │
-  ┌──────────────┐        │   │  BM25 Sparse  │      │ _node    approval     │  │
-  │  Dashboard   │        │   │  Index        │      │  │                    │  │
-  │  (Plotly)    │        │   └───────────────┘      │  ▼                    │  │
-  └──────────────┘        │                           │ [END]                 │  │
-                          │                           └───────────────────────┘  │
-                          └──────────────────────────────────────────────────────┘
+                          ┌─────────────────────────────────────────────────────────────┐
+                          │                        OpsPulse AI                          │
+                          │                                                             │
+  Telemetry Stream        │   Kafka Ingestion Pipeline      LangGraph State Machine     │
+  ┌─────────────────┐     │  ┌────────────────────────┐    ┌─────────────────────────┐  │
+  │  k8s.pod.logs   │────►┼──│ KafkaTelemetryConsumer │    │  [START]                │  │
+  │  k8s.system.    │     │  │ (Manual Offset Commit) │    │      │                  │  │
+  │  alerts         │     │  └───────────┬────────────┘    │      ▼                  │  │
+  └─────────────────┘     │              │                 │  parse_log_node         │  │
+  File Upload             │              ▼                 │      │                  │  │
+  ┌─────────────────┐     │  ┌────────────────────────┐    │      ▼                  │  │
+  │POST /logs/upload│────►┼──│ Dead Letter Queue (DLQ)│    │  retrieve_runbook       │  │
+  │POST /triage     │     │  └────────────────────────┘    │  (Dense + Sparse RAG)   │  │
+  └─────────────────┘     │              │                 │      │                  │  │
+                          │              ▼                 │      ▼                  │  │
+  HTTP Alerts             │  ┌────────────────────────┐    │  plan_remediation       │  │
+  ┌─────────────────┐     │  │ ErrorSpikeTracker      │───►│  (Groq Llama-3 / Claude)│  │
+  │ POST /ingest    │────►┼──│ + SystemAlert triage   │    │      │                  │  │
+  └─────────────────┘     │  └────────────────────────┘    │      ▼                  │  │
+                          │                                │  hitl_check_node        │  │
+  Slack HITL Webhook      │   Kubernetes Action Engine     │  ┌───┴──────┐           │  │
+  ┌─────────────────┐     │  ┌────────────────────────┐    │  ▼          ▼           │  │
+  │ SRE Review      │◄────┼──│ JWT: ROLE_SRE_ADMIN    │◄───┤ auto_exec  await_       │  │
+  │ Interactive Btn │     │  │ HITL Review Queue      │    │ _node      approval     │  │
+  └─────────────────┘     │  │ AppsV1Api / CoreV1Api  │    │  │    └───┬────┘        │  │
+                          │  │ Helm Rollback          │    │  ▼ (JWT gate) ▼        │  │
+  Kubernetes Cluster      │  └───────────┬────────────┘    │  execute_action         │  │
+  ┌─────────────────┐     │              │                 │      │                 │  │
+  │ Pods / Deploys  │◄────┼──────────────┘                 │      ▼                 │  │
+  └─────────────────┘     └─────────────────────────────────│  [END / HOLD AWAIT JWT]│ │
+                                                            └─────────────────────────┘
 ```
 
-### Component Map
+---
 
+## 🛡️ Kubernetes HITL Action Engine
+
+All cluster mutations are executed via [`src/k8s_executor.py`](src/k8s_executor.py), requiring two non-bypassable security gates:
+
+1. **Cryptographic JWT Gate**: Verifies JWT signature and checks for `ROLE_SRE_ADMIN` claim.
+2. **HITL Review Queue Gate**: Verifies that the action has an explicit `approval_id` in `APPROVED` status with matching action type and target resource.
+3. **Anti-Replay Protection**: Immediately transitions approval state to `EXECUTED` upon execution.
+
+```python
+from src.k8s_executor import (
+    restart_deployment, scale_deployment, rollback_helm_release, fetch_pod_logs,
+)
+
+# Execute rolling restart with HITL authorization
+result = restart_deployment(
+    namespace="production",
+    deployment_name="payment-processor",
+    auth_token="Bearer eyJhbGciOiJIUzI1NiIs...",
+    approval_id="hitl-84bf92a10c",
+)
+print(result.success, result.duration_ms, result.details)
 ```
-opspulse-ai/
-├── dashboard.py                  ← Streamlit interactive dashboard
-├── main.py                       ← uvicorn entry-point
-├── requirements.txt
-├── .env.example                  ← config template
-│
-├── data/runbooks/                ← Markdown runbooks (indexed into Qdrant)
-│   ├── database_connection_exhausted.md
-│   ├── oom_killed_pod.md
-│   ├── redis_connection_refused.md
-│   └── http_5xx_spike.md
-│
-└── src/
-    ├── metrics.py                ← Prometheus registry (counters + histograms)
-    │
-    ├── api/                      ← FastAPI application
-    │   ├── app.py                  create_app() factory, lifespan, CORS
-    │   ├── core/
-    │   │   ├── config.py           pydantic-settings (all env vars)
-    │   │   └── logging_config.py   structured JSON logging
-    │   ├── models/alert.py         AlertPayload (Pydantic v2) + validators
-    │   └── routes/alerts.py        POST /api/v1/alerts/ingest → 202
-    │
-    ├── rag/                      ← Hybrid retrieval pipeline
-    │   ├── chunker.py              Markdown H1-H3 splitter → RunbookChunk
-    │   ├── sparse.py               BM25Okapi scorer + tokeniser
-    │   ├── indexer.py              Qdrant collection manager + upsert
-    │   └── retriever.py            HybridSearchRetriever (dense+sparse+rerank)
-    │
-    ├── agent/                    ← LangGraph state machine
-    │   ├── state.py                IncidentState TypedDict + enums
-    │   ├── nodes.py                All 6 node functions
-    │   ├── slack_client.py         Block Kit webhook notifications
-    │   └── workflow.py             build_workflow() + conditional routing
-    │
-    ├── tools/                    ← Safe execution
-    │   └── sandbox.py              ContainerSandbox (inspect/logs/restart)
-    │
-    └── worker/                   ← Celery async processing
-        ├── celery_app.py           Celery factory + Redis config
-        └── tasks.py                process_alert task (retry, acks_late)
+
+---
+
+## 📡 Real-time Kafka Event Streaming
+
+The streaming consumer in [`src/streaming/kafka_consumer.py`](src/streaming/kafka_consumer.py) operates with **at-least-once delivery guarantees** across two topics — `k8s.pod.logs` (container/app logs) and `k8s.system.alerts` (kubelet/CoreDNS control-plane alerts):
+
+* **Manual Offset Commits**: `enable.auto.commit=False` ensures offsets are committed **only after LangGraph triage succeeds** (or the record is quarantined in the DLQ) — a crash mid-triage redelivers instead of losing the record.
+* **Dead Letter Queue (`k8s.telemetry.dlq`)**: Corrupted JSON or schema validation failures are immediately quarantined into the DLQ topic with diagnostic metadata, keeping the consumer partition moving.
+* **Error Spike Detector**: Tracks error frequencies per service/pod over a sliding window (default: 5 errors in 60s) to automatically trigger the LangGraph RCA workflow; critical system alerts triage immediately without waiting for a spike.
+
+Run it standalone:
+
+```bash
+python -m src.streaming.kafka_consumer
 ```
+
+---
+
+## 📂 Dual Ingestion Engine (Live Kafka + File Uploads)
+
+| Path | Endpoint / Module | Input | Output |
+|---|---|---|---|
+| Live stream | `src/streaming/kafka_consumer.py` | Kafka `k8s.pod.logs`, `k8s.system.alerts` | LangGraph triage → DLQ on failure |
+| File upload | `POST /api/v1/logs/upload` | `.log` / `.txt` stack traces + `.md` runbooks | `RemediationReport` + Qdrant index results |
+| JSON triage | `POST /api/v1/triage` | `{"raw_log_stacktrace": "..."}` | `RemediationReport` |
+
+```bash
+# Triage an uploaded stack trace
+curl -X POST http://localhost:8000/api/v1/logs/upload \
+  -F "files=@incident.log"
+
+# Upload a runbook — indexed into Qdrant on the fly
+curl -X POST http://localhost:8000/api/v1/logs/upload \
+  -F "files=@disk_full_runbook.md"
+
+# Standardized triage from JSON
+curl -X POST http://localhost:8000/api/v1/triage \
+  -H "Content-Type: application/json" \
+  -d '{"raw_log_stacktrace": "java.lang.OutOfMemoryError: Java heap space ..."}'
+```
+
+---
+
+## 🧾 Standardized Explainable Remediation JSON
+
+**Every** incident triage API response (`/api/v1/triage`, and the `triage` block of `/api/v1/logs/upload`) returns exactly this contract — a stable schema for dashboards, chat-ops, and automation:
+
+```json
+{
+  "verdict": "CRITICAL OOMKILLED CASCADE DETECTED",
+  "reasoning": "Root-cause analysis matching stack trace lines with runbook similarity scores (rerank_score, dense_score, rrf_score).",
+  "recommendation": "[HIGH] Scale Deployment Replicas to 5",
+  "next_steps": [
+    "Step 1: Review active memory usage on Prometheus Grafana dashboard",
+    "Step 2: Execute kubectl command or click Approve to trigger automated K8s restart",
+    "Step 3: Update application memory limit in Helm values repository"
+  ]
+}
+```
+
+* `verdict` — severity + classified failure signature + cascade detection.
+* `reasoning` — matched stack lines woven with the exact runbook similarity scores that justified the verdict.
+* `recommendation` — risk-tier-prefixed (`[LOW]`…`[CRITICAL]`) remediation from the planner.
+* `next_steps` — ordered operator runbook: diagnose → execute/approve → prevent.
+
+---
+
+## 🧪 10 Benchmark Kubernetes Chaos Scenarios
+
+Located in [`incident-simulation/data/`](incident-simulation/data/) and streamable into Kafka via [`scripts/simulate_k8s_outages.py`](scripts/simulate_k8s_outages.py):
+
+|| ID | Scenario | Category | Target | Recommended Action |
+||---|---|---|---|---|
+|| **INC-001** | Cascading OOMKilled Memory Leak | `RESOURCE_EXHAUSTION` | `deployment/payment-processor` | Memory limit increase to 4Gi & rolling restart |
+|| **INC-002** | CrashLoopBackOff (Missing Secret) | `CONFIGURATION_ERROR` | `deployment/auth-service` | Inject `JWT_SIGNING_KEY` & rollout restart |
+|| **INC-003** | CoreDNS Resolution Timeout Storm | `NETWORK_INFRASTRUCTURE` | `deployment/coredns` | Scale CoreDNS replicas to 6 |
+|| **INC-004** | PersistentVolumeDiskFull (Write Stall) | `STORAGE_EXHAUSTION` | `statefulset/event-store-db` | Expand PVC storage to 100Gi |
+|| **INC-005** | CFS CPU Throttling (p99 Latency Spike) | `CPU_SATURATION` | `deployment/checkout-api` | Increase CPU limit to 1000m / request 500m |
+|| **INC-006** | Ingress TLS Certificate Expiry | `SECURITY_CERTIFICATE` | `ingress/api-gateway-ingress` | ACME cert renewal via `cmctl` |
+|| **INC-007** | Node NotReady (DiskPressure Eviction) | `NODE_DEGRADATION` | `node/gke-prod-pool-node-3b` | Cordon, drain, and prune rootfs logs |
+|| **INC-008** | HikariCP Connection Pool Starvation | `DATABASE_CONTENTION` | `deployment/order-service` | Scale connection pool size to 100 |
+|| **INC-009** | Istio Envoy Sidecar mTLS Handshake Error | `SERVICE_MESH` | `deployment/billing-service` | Flush SDS cert cache & rollout restart |
+|| **INC-010** | Flawed Readiness Probe (0/3 Available) | `DEPLOYMENT_MISCONFIG` | `deployment/notification-dispatcher` | Fix probe port to 8000 |
+
+---
+
+## 📊 Interactive Streamlit Command Center
+
+The dashboard runs standalone or connected to live Prometheus / Kafka endpoints:
+
+```powershell
+streamlit run streamlit_app.py
+```
+
+### Dashboard Tabs
+1. **SRE Operations Cockpit**: Real-time MTTR, incident rate, error spike frequency, and health breakdown.
+2. **Interactive Chaos & RCA Simulator**: Live replay of all 10 Kubernetes benchmark scenarios with step-by-step LangGraph multi-agent diagnostic trace inspection, interactive metrics visualization, and confidence scoring.
+3. **Kubernetes HITL Action Engine**: Guarded action dispatcher with SRE JWT token validator and HITL approval queue.
+4. **Real-time Kafka & DLQ Stream**: Live event streaming inspector with Dead Letter Queue quarantine monitor.
+5. **AI Triage & Log Upload**: Drag-and-drop `.log`/`.txt`/`.md` ingestion, standardized remediation report viewer, paste-to-triage, and interactive Plotly verdict charts.
+
+### Chaos Benchmark Streaming (Kafka stress test)
+
+Stream all 10 multi-pod failure scenarios (OOMKilled cascades, CrashLoopBackOff, CoreDNS timeouts, …) into Kafka to stress-test the agent's root-cause analysis:
+
+```bash
+# List the scenarios
+python scripts/simulate_k8s_outages.py --list
+
+# Stream everything at 20 msg/s into k8s.pod.logs + k8s.system.alerts
+python scripts/simulate_k8s_outages.py --rate 20
+
+# Only OOM + CoreDNS + CrashLoop, plus poison records to exercise the DLQ
+python scripts/simulate_k8s_outages.py --scenario 1 --scenario 2 --scenario 3 --with-poison
+
+# No Kafka broker? Inspect the exact records that would be produced
+python scripts/simulate_k8s_outages.py --dry-run --scenario 1
+```
+
+### Incident Simulation Framework
+
+The project includes a comprehensive **Principal SRE-grade incident simulation framework** in the `incident-simulation/` directory for testing and validating OpsPulse AI's incident detection and diagnostic capabilities.
+
+#### Framework Overview
+
+This benchmark framework provides:
+- **10 Realistic Kubernetes Cluster Incidents** with detailed log streams and metrics formatted as raw JSON
+- **LangGraph Multi-Agent Diagnostic Traces** for each incident, showing step-by-step root-cause analysis
+- **Benchmark Test Inputs** formatted as raw JSON for easy integration
+- **Confidence Scoring** and remediation recommendations for each incident
+- **Interactive Streamlit Visualization** with:
+  - Real-time metrics time-series charts (Plotly - fully interactive)
+  - Log level distribution pie charts
+  - Interactive log stream explorer with filtering
+  - Step-by-step LangGraph agent trace visualization
+  - Confidence scoring with visual progress bars
+  - Remediation recommendations with priority levels
+
+#### Incident Catalog
+
+| ID | Type | Namespace | Complexity | Overall Confidence | Category |
+|----|------|-----------|------------|-------------------|----------|
+| INC-2026-001 | Cascading OOMKilled | payment-service | High | 0.94 | Resource Exhaustion |
+| INC-2026-002 | CrashLoopBackOff Missing Secret | auth-service | Medium | 0.96 | Configuration Error |
+| INC-2026-003 | CoreDNS Resolution Timeout | kube-system | High | 0.93 | Network Infrastructure |
+| INC-2026-004 | PersistentVolume Disk Full | database | High | 0.95 | Storage Exhaustion |
+| INC-2026-005 | CPU Throttling | api-service | Medium | 0.95 | CPU Saturation |
+| INC-2026-006 | ImagePullBackOff Registry Unavailable | order-service | Medium | 0.93 | Registry Connectivity |
+| INC-2026-007 | Network Policy Connection Blocked | microservices | Medium | 0.96 | Network Security |
+| INC-2026-008 | Resource Quota Exceeded | development | Low | 0.96 | Resource Management |
+| INC-2026-009 | Node NotReady Disk Pressure | all-namespaces | Medium | 0.95 | Node Health |
+| INC-2026-010 | HPA Scale Failure | web-frontend | Medium | 0.94 | Autoscaling |
+
+#### Usage
+
+**Running the Interactive Streamlit Dashboard:**
+
+```bash
+streamlit run streamlit_app.py
+```
+
+Navigate to the **"⚡ Interactive Chaos & RCA Simulator"** tab to:
+1. Select any of the 10 benchmark incidents from the dropdown
+2. Click "🚀 Trigger Simulation & RCA" to replay the incident
+3. View interactive metrics visualizations with Plotly charts
+4. Explore the log stream with filtering capabilities
+5. Inspect the step-by-step LangGraph multi-agent diagnostic trace
+6. Review confidence scores and remediation recommendations
+
+**Programmatic Usage:**
+
+```python
+from src.agent.workflow import run_workflow
+from src.agent.reporting import build_remediation_report
+
+# Run the LangGraph triage pipeline on an alert payload
+state = run_workflow({
+    "alert_id": "manual-001",
+    "service_name": "payment-service",
+    "severity": "critical",
+    "raw_log_stacktrace": "java.lang.OutOfMemoryError: Java heap space ...",
+    "environment": "production",
+})
+
+# Standardized explainable remediation JSON
+report = build_remediation_report(state)
+print(report.verdict)          # e.g. "CRITICAL OOMKILLED CASCADE DETECTED"
+print(report.recommendation)   # e.g. "[HIGH] Scale Deployment Replicas to 5"
+for step in report.next_steps:
+    print(step)
+
+# Stream the 10 benchmark scenarios into Kafka:
+#   python scripts/simulate_k8s_outages.py --rate 20
+```
+
+For detailed documentation, see [`incident-simulation/docs/README.md`](incident-simulation/docs/README.md) and [`incident-simulation/docs/incident_catalog.md`](incident-simulation/docs/incident_catalog.md).
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- Python 3.12+
-- Docker Desktop running
-- Groq API key (free at [console.groq.com](https://console.groq.com/keys))
-
-### 1. Clone & install
+### 1. Clone & Setup Environment
 
 ```bash
 git clone https://github.com/SumedhPatil1507/opspulse-ai.git
 cd opspulse-ai
+
+# Create virtual environment
 python -m venv .venv
+
 # Windows
 .venv\Scripts\Activate.ps1
-# macOS/Linux
+# Linux / macOS
 source .venv/bin/activate
 
-# Dashboard only (fast, Streamlit Cloud compatible)
-pip install -r requirements.txt
-
-# Full project (FastAPI + Celery + RAG + LangGraph + Docker sandbox)
+# Install the API, Kafka, Kubernetes, AI and dashboard dependencies
 pip install -r requirements-full.txt
 ```
 
-### 2. Configure environment
+### 2. Configure Environment Variables
 
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` and set at minimum:
-
+Set the required values in `.env` (use your own unique JWT secret):
 ```env
-GROQ_API_KEY=gsk_your_key_here          # required for LLM planning
-SLACK_WEBHOOK_URL=https://hooks.slack.com/...  # optional — enables HITL
+GROQ_API_KEY=gsk_your_groq_api_key
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+JWT_SECRET_KEY=<unique-secret-at-least-32-characters>
 ```
 
-> ⚠️ **Windows users:** Never use `echo "..." >> .env` — PowerShell writes UTF-16.
-> Edit `.env` directly in your editor instead.
-
-### 3. Start infrastructure
+Generate a suitable JWT secret with:
 
 ```bash
-# Qdrant vector database
-docker run -d -p 6333:6333 --name qdrant qdrant/qdrant
-
-# Redis (Celery broker)
-docker run -d -p 6379:6379 --name redis redis:7
+python -c "import secrets; print(secrets.token_urlsafe(48))"
 ```
 
-### 4. Index runbooks
+Start Kafka and Qdrant before enabling their integrations. The dashboard can
+still be explored in demo mode without those services; live upload/triage
+requires the API and its configured model/vector dependencies.
+
+### 3. Launch the API and interactive Streamlit dashboard
+
+In two terminals from the project root:
 
 ```bash
-python -c "from src.rag.indexer import RunbookIndexer; RunbookIndexer.build_index()"
-```
+# Terminal 1: API
+uvicorn src.api.app:app --reload --host 0.0.0.0 --port 8000
 
-### 5. Start all services
-
-```bash
-# Terminal 1 — FastAPI
-uvicorn src.api.app:app --reload --port 8000
-
-# Terminal 2 — Celery worker
-celery -A src.worker.celery_app worker --loglevel=info -Q alerts
-
-# Terminal 3 — Streamlit dashboard
-streamlit run dashboard.py
-```
-
-### 6. Send a test alert
-
-```bash
-curl -X POST http://localhost:8000/api/v1/alerts/ingest \
-  -H "Content-Type: application/json" \
-  -d '{
-    "alert_id": "test-001",
-    "service_name": "payment-service",
-    "severity": "critical",
-    "environment": "production",
-    "raw_log_stacktrace": "sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out",
-    "timestamp": "2026-10-06T12:00:00Z"
-  }'
-```
-
-Expected response:
-```json
-{
-  "tracking_id": "celery-task-uuid",
-  "status": "queued",
-  "message": "Alert 'test-001' accepted and queued for processing."
-}
-```
-
----
-
-## 📈 Streamlit Dashboard
-
-[![Open in Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://opspulse-ai-g6vhw4n7kc6hjf9zjnrm48.streamlit.app)
-
-```bash
-# Local
+# Terminal 2: interactive SRE dashboard
 streamlit run streamlit_app.py
 ```
 
-Deploys to **https://opspulse-ai-g6vhw4n7kc6hjf9zjnrm48.streamlit.app**
+Open the Streamlit URL printed in the terminal (usually `http://localhost:8501`).
+Set **FastAPI Base URL** in the sidebar if the API runs on another host. The
+dashboard includes interactive Plotly charts, Kafka/DLQ inspection, outage
+scenarios, JWT/HITL action controls, drag-and-drop `.log` / `.txt` / `.md`
+ingestion, and a JSON triage view. `requirements.txt` contains only the lighter
+dashboard dependencies; use `requirements-full.txt` for the API and integrations.
 
-> Entry-point for Streamlit Cloud is `streamlit_app.py` on the `main` branch.
+### 4. Run Test Suite
 
-Opens at **http://localhost:8501**
+```powershell
+# Run the full 116-test suite
+pytest -v
 
-| Section | Charts |
-|---|---|
-| KPI Row | Total incidents · Auto-resolved · HITL approvals · Failed · P95 latency |
-| Incident Timeline | Stacked bar over time (by workflow status) |
-| Status Split | Donut — completed / awaiting_human / failed / rejected |
-| Latency Histogram | Overlaid per environment with P95 marker |
-| Risk × Severity | Heatmap (RdYlGn) |
-| Service Breakdown | `incidents_auto_resolved_total` stacked bar per service |
-| HITL Funnel | HIGH/CRITICAL → Slack sent → Approved → Executed |
-| LLM Metrics | Provider pie + latency histogram |
-| Docker Sandbox | Operation counts + latency box plots |
-| Severity Trends | Line chart over time |
-| Latency Scatter | Service × duration coloured by risk tier |
-| Incidents Table | Searchable, badge-decorated last 15 incidents |
-
-**Live mode:** connect to `http://localhost:8000/metrics` in the sidebar.
-**Demo mode:** fully simulated with configurable seed and service list.
-
----
-
-## 🔬 API Reference
-
-### `POST /api/v1/alerts/ingest`
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `alert_id` | string | ✅ | Unique alert identifier |
-| `service_name` | string | ✅ | Originating service |
-| `severity` | enum | ✅ | `low` / `medium` / `high` / `critical` |
-| `raw_log_stacktrace` | string | ✅ | Full stack trace text |
-| `timestamp` | datetime | — | Defaults to UTC now |
-| `environment` | enum | ✅ | `development` / `staging` / `production` |
-
-> **Constraint:** `production` alerts must be `high` or `critical` severity.
-
-**Response `202 Accepted`:**
-```json
-{ "tracking_id": "uuid", "status": "queued", "message": "..." }
-```
-
-### `GET /healthz`
-```json
-{ "status": "ok", "service": "opspulse-ai" }
-```
-
-### `GET /metrics`
-Prometheus exposition format. Scrape with:
-```yaml
-# prometheus.yml
-scrape_configs:
-  - job_name: opspulse
-    static_configs:
-      - targets: ['localhost:8000']
+# Run individual subsystems
+pytest tests/test_k8s_executor.py -v      # K8s executor + JWT/HITL safety gates
+pytest tests/test_kafka_consumer.py -v    # Manual offsets + DLQ routing
+pytest tests/test_triage_api.py -v        # Standardized remediation JSON contract
+pytest tests/test_api.py -v               # Alert ingestion & validation
 ```
 
 ---
 
-## 📊 Prometheus Metrics
-
-| Metric | Type | Labels | Description |
-|---|---|---|---|
-| `opspulse_agent_execution_latency_seconds` | Histogram | `status`, `environment` | End-to-end workflow duration |
-| `opspulse_incidents_auto_resolved_total` | Counter | `service_name`, `severity`, `environment` | Auto-resolved without HITL |
-| `opspulse_hitl_approvals_total` | Counter | `decision`, `risk_tier`, `service_name` | Human approval/rejection |
-| `opspulse_sandbox_operations_total` | Counter | `operation`, `status`, `container_name` | Docker SDK calls |
-| `opspulse_sandbox_operation_latency_seconds` | Histogram | `operation` | Docker call latency |
-| `opspulse_llm_calls_total` | Counter | `provider`, `status` | LLM API invocations |
-| `opspulse_llm_call_latency_seconds` | Histogram | `provider` | LLM round-trip latency |
-| `opspulse_runbook_retrievals_total` | Counter | `status` | RAG retrieval outcomes |
-
----
-
-## 🤖 LangGraph Workflow
+## 📂 Project Structure
 
 ```
-[START]
-  │
-  ▼
-parse_log_node           ← Extracts exception signatures, keywords (regex)
-  │  ↘ FAILED → [END]
-  ▼
-retrieve_runbook_node    ← Hybrid search: dense ANN + BM25 → cross-encoder re-rank
-  │  ↘ FAILED → [END]
-  ▼
-plan_remediation_node    ← LLM (Groq/Claude) → structured JSON ProposedAction
-  │  ↘ FAILED → [END]
-  ▼
-hitl_check_node          ← Risk tier evaluation
-  ├── LOW/MEDIUM/APPROVED ──► auto_execute_node ──► [END: COMPLETED]
-  ├── REJECTED ────────────────────────────────────► [END: REJECTED]
-  └── HIGH/CRITICAL ───────► await_approval_node ──► [END: AWAITING_HUMAN]
-                                 │ (Slack Block Kit webhook posted)
+opspulse-ai/
+├── data/
+│   └── runbooks/                   ← Markdown SRE runbooks (Qdrant hybrid RAG)
+│
+├── src/
+│   ├── agent/                      ← LangGraph multi-agent state machine
+│   │   ├── nodes.py                ← 7 nodes (Parse, Retrieve, Plan, HITL, Execute…)
+│   │   ├── state.py                ← IncidentState TypedDict + reducers
+│   │   ├── workflow.py             ← StateGraph compilation & JWT-gated routing
+│   │   ├── reporting.py            ← Standardized RemediationReport builder
+│   │   └── slack_client.py         ← Slack Block Kit HITL interactive webhook
+│   │
+│   ├── api/                        ← FastAPI service & routing
+│   │   ├── app.py                  ← FastAPI factory & OpenAPI docs
+│   │   ├── core/config.py          ← Pydantic v2 Settings (Kafka, K8s, JWT, Redis)
+│   │   ├── models/remediation.py   ← RemediationReport contract (verdict/…/next_steps)
+│   │   └── routes/
+│   │       ├── alerts.py           ← POST /api/v1/alerts/ingest (+ batch)
+│   │       ├── logs.py             ← POST /api/v1/logs/upload · POST /api/v1/triage
+│   │       └── runbooks.py         ← POST /api/v1/runbooks/upload
+│   │
+│   ├── k8s_executor.py             ← AppsV1Api/CoreV1Api HITL executor (JWT-gated)
+│   ├── streaming/
+│   │   └── kafka_consumer.py       ← Manual-offset consumer + DLQ + LangGraph triage
+│   ├── metrics.py                  ← Prometheus metrics registry & ASGI /metrics
+│   └── worker/tasks.py             ← Celery async alert processing tasks
+│
+├── scripts/
+│   └── simulate_k8s_outages.py     ← Streams 10 chaos scenarios into Kafka
+│
+├── tests/
+│   ├── test_k8s_executor.py        ← K8s API mocks + JWT/HITL safety-gate tests
+│   ├── test_kafka_consumer.py      ← Manual offset commit + DLQ tests
+│   ├── test_triage_api.py          ← Standardized JSON contract + upload tests
+│   └── test_api.py                 ← FastAPI ingestion & validation tests
+│
+├── incident-simulation/            ← Principal SRE-grade incident simulation framework
+│   ├── data/                       ← 10 realistic Kubernetes incident log streams
+│   ├── traces/                     ← LangGraph multi-agent diagnostic traces
+│   └── docs/                       ← Documentation and usage examples
+│
+├── dashboard.py                    ← Streamlit SRE command center
+├── streamlit_app.py                ← Streamlit entry point
+├── requirements.txt                ← Lightweight dependencies
+└── requirements-full.txt           ← Full production dependencies
 ```
 
-### Risk Tier → HITL Routing
-
-| Risk Tier | Route | Slack? |
-|---|---|---|
-| `LOW` | auto_execute | ❌ |
-| `MEDIUM` | auto_execute | ❌ |
-| `HIGH` | await_approval | ✅ |
-| `CRITICAL` | await_approval | ✅ |
-| `UNKNOWN` | await_approval (fail-safe) | ✅ |
-
 ---
 
-## 🐳 Docker Sandbox
+## 📜 License
 
-```python
-from src.tools.sandbox import ContainerSandbox
-
-with ContainerSandbox() as sb:
-    # Read-only — never mutates container state
-    status = sb.inspect_container("payment-service")
-    logs   = sb.get_container_logs("payment-service", tail=100)
-
-    # Non-destructive restart (graceful SIGTERM → wait → SIGKILL → start)
-    result = sb.restart_container("payment-service")
-
-    print(f"Running: {status.running} | Health: {status.health}")
-    print(f"Last log: {logs.lines[-1]}")
-    print(f"Restart OK: {result.success} ({result.duration_ms:.0f}ms)")
-```
-
-**Safety layers:**
-1. `SANDBOX_ALLOWED_PREFIXES` allowlist — empty = dev only, warn in production
-2. No `kill`, `remove`, `exec`, volume ops — intentionally absent
-3. `internal=True` bridge network — no outbound internet from sandboxed containers
-4. Configurable `SANDBOX_RESTART_TIMEOUT` — prevents hung containers blocking the agent
-5. Every call emits a Prometheus metric + structured log line
-
----
-
-## 🧪 Running Tests
-
-```bash
-# All tests (no Redis or Docker required — fully mocked)
-pytest
-
-# Verbose with coverage
-pytest -v --tb=short
-
-# Single test class
-pytest tests/test_api.py::TestIngestEndpoint -v
-```
-
-Tests use `httpx.AsyncClient` + `ASGITransport` — no real HTTP server needed.
-Celery is injected via FastAPI's `Depends` override — no broker required.
-
----
-
-## ⚙️ Configuration Reference
-
-All settings are read from environment variables or `.env`:
-
-| Variable | Default | Description |
-|---|---|---|
-| `GROQ_API_KEY` | — | **Required** for LLM planning (primary) |
-| `ANTHROPIC_API_KEY` | — | Claude fallback when Groq key absent |
-| `SLACK_WEBHOOK_URL` | — | HITL notifications; HIGH risk skipped if unset |
-| `REDIS_URL` | `redis://localhost:6379/0` | Celery broker + backend |
-| `QDRANT_HOST` | `localhost` | Qdrant vector DB host |
-| `QDRANT_PORT` | `6333` | Qdrant port |
-| `RUNBOOKS_DIR` | `data/runbooks` | Path to Markdown runbook files |
-| `HITL_RISK_TIERS` | `["HIGH","CRITICAL"]` | Tiers requiring human approval |
-| `SANDBOX_ALLOWED_PREFIXES` | `[]` | Container name prefixes sandbox may touch |
-| `METRICS_ENABLED` | `true` | Toggle Prometheus metric collection |
-| `DOCKER_BASE_URL` | `npipe:////./pipe/docker_engine` | Docker daemon socket |
-
----
-
-## 📁 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| API | FastAPI + Pydantic v2 + uvicorn |
-| Task Queue | Celery 5 + Redis |
-| Vector DB | Qdrant |
-| Embeddings | `sentence-transformers/all-MiniLM-L6-v2` |
-| Re-ranking | `cross-encoder/ms-marco-MiniLM-L-6-v2` |
-| Sparse Retrieval | BM25Okapi (`rank-bm25`) |
-| Agent Framework | LangGraph 0.2 |
-| LLM | Groq (llama3-70b-8192) / Claude 3.5 Sonnet |
-| Container Ops | Docker SDK 7 |
-| Metrics | Prometheus Client |
-| Dashboard | Streamlit + Plotly |
-| Notifications | Slack Incoming Webhooks (Block Kit) |
-
----
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feat/my-feature`
-3. Run tests: `pytest`
-4. Commit: `git commit -m "feat: add my feature"`
-5. Push and open a Pull Request
-
----
-
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) for details.
+Distributed under the **MIT License**. See [LICENSE](LICENSE) for more information.
 
 ---
 
 <div align="center">
-Built with ❤️ using LangGraph · Qdrant · Groq · FastAPI · Streamlit
+Built with ❤️ using LangGraph · Kafka · Kubernetes · FastAPI · Streamlit
 </div>

@@ -1,0 +1,140 @@
+{
+  "incident_id": "INC-2026-009",
+  "incident_type": "NodeNotReady_DiskPressure",
+  "timestamp_start": "2026-10-08T19:45:00Z",
+  "timestamp_end": "2026-10-08T20:00:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "all-namespaces",
+  "affected_pods": [
+    "app-1-3a4b5-c6d7e",
+    "app-2-5e6f7-g8h9i",
+    "app-3-7j8k9-l0m1n"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T19:45:15.123Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "message": "Disk pressure detected: node disk usage at 92%"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:20.456Z",
+      "level": "WARNING",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "message": "Eviction manager: attempting to reclaim disk space"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:25.789Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "message": "Node disk usage critical: 95% - insufficient space for new containers"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:30.123Z",
+      "level": "WARNING",
+      "component": "kube-controller-manager",
+      "message": "Node aks-worker-04 condition DiskPressure: True"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:35.456Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "pod": "app-1-3a4b5-c6d7e",
+      "message": "Evicting pod app-1-3a4b5-c6d7e due to disk pressure"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:40.789Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "pod": "app-2-5e6f7-g8h9i",
+      "message": "Evicting pod app-2-5e6f7-g8h9i due to disk pressure"
+    },
+    {
+      "timestamp": "2026-10-08T19:45:45.123Z",
+      "level": "WARNING",
+      "component": "kube-scheduler",
+      "message": "Node aks-worker-04 marked unschedulable due to disk pressure"
+    },
+    {
+      "timestamp": "2026-10-08T19:46:00.456Z",
+      "level": "ERROR",
+      "component": "kubelet",
+      "node": "aks-worker-04",
+      "message": "Node disk usage at 98% - node taint being applied"
+    },
+    {
+      "timestamp": "2026-10-08T19:46:15.789Z",
+      "level": "CRITICAL",
+      "component": "kube-controller-manager",
+      "message": "Node aks-worker-04 status changed to NotReady: DiskPressure"
+    },
+    {
+      "timestamp": "2026-10-08T19:46:30.123Z",
+      "level": "ERROR",
+      "component": "app-3",
+      "pod": "app-3-7j8k9-l0m1n",
+      "message": "Pod rescheduled to different node due to node NotReady"
+    },
+    {
+      "timestamp": "2026-10-08T19:47:00.456Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: NodeNotReady - aks-worker-04 NotReady for 2 minutes"
+    },
+    {
+      "timestamp": "2026-10-08T19:47:30.789Z",
+      "level": "WARNING",
+      "component": "cluster-autoscaler",
+      "message": "Unable to scale cluster: node aks-worker-04 NotReady preventing scale-down"
+    },
+    {
+      "timestamp": "2026-10-08T19:48:00.123Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: NodeDiskPressure - aks-worker-04 disk usage at 98%"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T19:45:00Z",
+      "metric": "kube_node_status_condition",
+      "labels": {"node": "aks-worker-04", "condition": "DiskPressure", "status": "true"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T19:45:30Z",
+      "metric": "kubelet_volume_stats_used_bytes",
+      "labels": {"node": "aks-worker-04"},
+      "value": 980000000000
+    },
+    {
+      "timestamp": "2026-10-08T19:46:00Z",
+      "metric": "kube_node_status_phase",
+      "labels": {"node": "aks-worker-04", "phase": "NotReady"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T19:46:30Z",
+      "metric": "kube_pod_status_phase",
+      "labels": {"pod": "app-1-3a4b5-c6d7e", "phase": "Failed"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T19:47:00Z",
+      "metric": "node_disk_usage_percent",
+      "labels": {"node": "aks-worker-04"},
+      "value": 98
+    },
+    {
+      "timestamp": "2026-10-08T19:47:30Z",
+      "metric": "node_ready_count",
+      "labels": {"node": "aks-worker-04"},
+      "value": 0
+    }
+  ]
+}

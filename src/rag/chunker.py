@@ -156,6 +156,25 @@ class RunbookChunker:
         )
         return all_chunks
 
+    def chunk_file(self, path: str | Path) -> list[RunbookChunk]:
+        """
+        Chunk a single Markdown file (used by the on-the-fly upload API).
+
+        Parameters
+        ----------
+        path : Path to an existing ``*.md`` file. Must live inside (or be
+               copied into) a directory the chunker can read.
+
+        Returns
+        -------
+        list[RunbookChunk] ordered by chunk index.
+        """
+        md_path = Path(path).resolve()
+        if not md_path.exists():
+            raise FileNotFoundError(f"Runbook file not found: {md_path}")
+        return list(self._process_file(md_path))
+
+
     # ── Internal helpers ───────────────────────────────────────────────────
 
     def _process_file(self, path: Path) -> Iterator[RunbookChunk]:

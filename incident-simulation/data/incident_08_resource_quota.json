@@ -1,0 +1,125 @@
+{
+  "incident_id": "INC-2026-008",
+  "incident_type": "ResourceQuotaExceeded",
+  "timestamp_start": "2026-10-08T18:30:00Z",
+  "timestamp_end": "2026-10-08T18:45:00Z",
+  "cluster": "prod-aks-cluster-01",
+  "namespace": "development",
+  "affected_pods": [
+    "dev-service-0a1b2-c3d4e",
+    "dev-service-0a1b2-e5f6g",
+    "dev-service-0a1b2-h7i8j"
+  ],
+  "log_stream": [
+    {
+      "timestamp": "2026-10-08T18:30:15.123Z",
+      "level": "INFO",
+      "component": "kube-controller-manager",
+      "message": "New deployment request for dev-service with 3 replicas"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:20.456Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create pod dev-service-0a1b2-c3d4e: exceeded quota: compute-resources, requested: cpu=500m,memory=1Gi, used: cpu=9500m,memory=19Gi, limited: cpu=10000m,memory=20Gi"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:25.789Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create pod dev-service-0a1b2-e5f6g: exceeded quota: compute-resources"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:30.123Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create pod dev-service-0a1b2-h7i8j: exceeded quota: compute-resources"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:35.456Z",
+      "level": "WARNING",
+      "component": "deployment-controller",
+      "message": "Dev-service deployment scaled to 0/3 replicas due to resource quota"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:40.789Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create Service dev-service: exceeded quota: services, requested: 1, used: 9, limited: 10"
+    },
+    {
+      "timestamp": "2026-10-08T18:30:45.123Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create ConfigMap dev-config: exceeded quota: configmaps, requested: 1, used: 49, limited: 50"
+    },
+    {
+      "timestamp": "2026-10-08T18:31:00.456Z",
+      "level": "WARNING",
+      "component": "kube-scheduler",
+      "message": "Pod dev-service-0a1b2-c3d4e unschedulable: insufficient CPU quota"
+    },
+    {
+      "timestamp": "2026-10-08T18:31:15.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: ResourceQuotaExceeded - development namespace at 95% CPU quota"
+    },
+    {
+      "timestamp": "2026-10-08T18:31:30.123Z",
+      "level": "ERROR",
+      "component": "kube-controller-manager",
+      "message": "Failed to create PersistentVolumeClaim dev-pvc: exceeded quota: persistentvolumeclaims, requested: 1, used: 9, limited: 10"
+    },
+    {
+      "timestamp": "2026-10-08T18:32:00.456Z",
+      "level": "WARNING",
+      "component": "deployment-controller",
+      "message": "Deployment dev-service has 0 ready replicas due to resource constraints"
+    },
+    {
+      "timestamp": "2026-10-08T18:32:30.789Z",
+      "level": "CRITICAL",
+      "component": "prometheus",
+      "message": "Alert: ResourceQuotaExceeded - development namespace at 100% memory quota"
+    }
+  ],
+  "metrics_stream": [
+    {
+      "timestamp": "2026-10-08T18:30:00Z",
+      "metric": "kube_resourcequota",
+      "labels": {"namespace": "development", "resource": "cpu", "quota": "10000m"},
+      "value": 9500
+    },
+    {
+      "timestamp": "2026-10-08T18:30:30Z",
+      "metric": "kube_resourcequota_used",
+      "labels": {"namespace": "development", "resource": "memory"},
+      "value": 19000000000
+    },
+    {
+      "timestamp": "2026-10-08T18:31:00Z",
+      "metric": "kube_resourcequota_hard",
+      "labels": {"namespace": "development", "resource": "memory"},
+      "value": 20000000000
+    },
+    {
+      "timestamp": "2026-10-08T18:31:30Z",
+      "metric": "kube_deployment_status_replicas_available",
+      "labels": {"deployment": "dev-service", "namespace": "development"},
+      "value": 0
+    },
+    {
+      "timestamp": "2026-10-08T18:32:00Z",
+      "metric": "kube_pod_status_phase",
+      "labels": {"pod": "dev-service-0a1b2-c3d4e", "phase": "Pending"},
+      "value": 1
+    },
+    {
+      "timestamp": "2026-10-08T18:32:30Z",
+      "metric": "resource_quota_utilization",
+      "labels": {"namespace": "development", "resource": "services"},
+      "value": 0.9
+    }
+  ]
+}

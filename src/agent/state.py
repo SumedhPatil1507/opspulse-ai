@@ -111,6 +111,7 @@ class NodeName(str, Enum):
     HITL_CHECK = "hitl_check"
     AUTO_EXECUTE = "auto_execute"
     AWAIT_APPROVAL = "await_approval"
+    EXECUTE_ACTION = "execute_action"
     TERMINAL = "__end__"
 
 
@@ -331,6 +332,21 @@ class IncidentState(TypedDict, total=False):
     slack_message_ts: Annotated[str | None, _last_value]
     """Slack message timestamp for threading follow-up replies."""
 
+    # ── ExecuteActionNode (JWT-gated Kubernetes dispatch) ─────────────────────
+    auth_token: Annotated[str | None, _last_value]
+    """
+    JWT authorization token supplied by the approving SRE.  Required before
+    ``ExecuteActionNode`` may dispatch anything to ``src/k8s_executor.py``.
+    The token must carry the ``ROLE_SRE_ADMIN`` role claim.
+    """
+
+    execution_result: Annotated[dict[str, Any] | None, _last_value]
+    """
+    Structured result returned by ``src/k8s_executor.py`` after a guarded
+    dispatch (``K8sActionResult`` as a dict), or ``None`` when the workflow
+    ended before execution.
+    """
+
     # ── Workflow-level metadata ────────────────────────────────────────────
     workflow_status: Annotated[WorkflowStatus | None, _last_value]
     """Overall run status, updated by each node."""
@@ -407,6 +423,8 @@ def initial_state(alert_data: dict[str, Any]) -> IncidentState:
         approval_status=None,
         slack_notification_sent=None,
         slack_message_ts=None,
+        auth_token=alert_data.get("auth_token"),
+        execution_result=None,
         workflow_status=WorkflowStatus.RUNNING,
         error_message=None,
         retry_count=0,

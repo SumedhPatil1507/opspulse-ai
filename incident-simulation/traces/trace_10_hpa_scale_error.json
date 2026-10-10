@@ -1,0 +1,114 @@
+{
+  "incident_id": "INC-2026-010",
+  "incident_type": "HPAScaleFailure_InsufficientMetrics",
+  "langgraph_diagnostic_trace": {
+    "agents_involved": [
+      "LogAnalyzer",
+      "MetricsValidator",
+      "HPAAuditor",
+      "RootCauseAnalyzer",
+      "RemediationAdvisor"
+    ],
+    "diagnostic_steps": [
+      {
+        "step": 1,
+        "agent": "LogAnalyzer",
+        "action": "Parse log stream for HPA scaling failures",
+        "findings": [
+          "HPA unable to calculate metrics: missing CPU metrics for pods",
+          "Metrics server unable to scrape pods due to connection timeout",
+          "HPA stuck at 2 replicas despite high load (desired: 10)",
+          "Request rate at 5000 req/s with response latency at 3000ms"
+        ],
+        "confidence": 0.96
+      },
+      {
+        "step": 2,
+        "agent": "MetricsValidator",
+        "action": "Validate metrics server health",
+        "findings": [
+          "Metrics server health check failed",
+          "Metrics server not responding in kube-system namespace",
+          "Metrics server pods are running but not serving metrics",
+          "No CPU metrics available for web-frontend pods"
+        ],
+        "confidence": 0.97
+      },
+      {
+        "step": 3,
+        "agent": "HPAAuditor",
+        "action": "Audit HPA configuration",
+        "findings": [
+          "HPA configured with CPU target at 70%",
+          "Min replicas: 2, Max replicas: 10",
+          "HPA unable to scale due to missing metrics",
+          "Metrics API endpoint not accessible"
+        ],
+        "confidence": 0.95
+      },
+      {
+        "step": 4,
+        "agent": "RootCauseAnalyzer",
+        "action": "Identify root cause",
+        "findings": [
+          "Root cause: Metrics server not responding to scrape requests",
+          "Contributing factor: Metrics server resource limits too low",
+          "Possible network issue between metrics server and kubelet",
+          "Metrics server experiencing connection timeouts"
+        ],
+        "confidence": 0.93,
+        "root_cause": "Metrics server failure preventing HPA from scaling"
+      },
+      {
+        "step": 5,
+        "agent": "RemediationAdvisor",
+        "action": "Generate remediation commands",
+        "recommendations": [
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl rollout restart deployment metrics-server -n kube-system",
+            "rationale": "Restart metrics server to clear any stuck state"
+          },
+          {
+            "priority": "CRITICAL",
+            "command": "kubectl set resources deployment metrics-server --limits=cpu=500m --memory=500Mi --requests=cpu=100m --memory=100Mi -n kube-system",
+            "rationale": "Increase metrics server resource limits to handle scrape load"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl get pods -n kube-system -l k8s-app=metrics-server -o name | xargs -I {} kubectl logs {} -n kube-system --tail=50",
+            "rationale": "Check metrics server logs for error details"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl get --raw /apis/metrics.k8s.io/v1beta1/nodes",
+            "rationale": "Test metrics API endpoint availability"
+          },
+          {
+            "priority": "HIGH",
+            "command": "kubectl scale deployment web-frontend --replicas=5 -n web-frontend",
+            "rationale": "Manually scale to handle immediate load while fixing metrics"
+          },
+          {
+            "priority": "MEDIUM",
+            "command": "kubectl apply -f - <<EOF\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: metrics-server-config\n  namespace: kube-system\ndata:\n  NannyConfiguration: |\n    apiVersion: nanny/v1alpha1\n    kind: NannyConfiguration\n    source:\n      containers:\n      - name: metrics-server\n    destination:\n      containers:\n      - name: metrics-server\nEOF",
+            "rationale": "Configure metrics server with proper settings"
+          },
+          {
+            "priority": "LOW",
+            "command": "kubectl apply -f - <<EOF\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata:\n  name: web-frontend\n  namespace: web-frontend\nspec:\n  scaleTargetRef:\n    apiVersion: apps/v1\n    kind: Deployment\n    name: web-frontend\n  minReplicas: 2\n  maxReplicas: 10\n  metrics:\n  - type: Resource\n    resource:\n      name: cpu\n      target:\n        type: Utilization\n        averageUtilization: 70\n  - type: Resource\n    resource:\n      name: memory\n      target:\n        type: Utilization\n        averageUtilization: 80\nEOF",
+            "rationale": "Update HPA to include memory metrics as fallback"
+          }
+        ],
+        "confidence": 0.91
+      }
+    ],
+    "overall_confidence": 0.94,
+    "remediation_validation": [
+      "Verify metrics server is healthy and serving metrics",
+      "Test metrics API endpoint returns node and pod metrics",
+      "Confirm HPA can scale based on CPU metrics",
+      "Monitor latency returns to baseline (< 200ms)"
+    ]
+  }
+}

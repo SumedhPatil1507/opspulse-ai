@@ -198,10 +198,10 @@ class Settings(BaseSettings):
 
     # ── Kubernetes & HITL Executor ─────────────────────────────────────────────
     JWT_SECRET_KEY: str = Field(
-        default="opspulse-insecure-default-jwt-secret-key-change-in-production",
+        default="",
         description=(
             "Secret key for signing and verifying HITL action JWT tokens. "
-            "Every Kubernetes execution requires a JWT signed with ROLE_SRE_ADMIN."
+            "Set a unique secret of at least 32 characters before enabling execution."
         ),
     )
     JWT_ALGORITHM: str = Field(

@@ -316,8 +316,8 @@ python -m venv .venv
 # Linux / macOS
 source .venv/bin/activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install the API, Kafka, Kubernetes, AI and dashboard dependencies
+pip install -r requirements-full.txt
 ```
 
 ### 2. Configure Environment Variables
@@ -326,14 +326,43 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-Set keys in `.env`:
+Set the required values in `.env` (use your own unique JWT secret):
 ```env
 GROQ_API_KEY=gsk_your_groq_api_key
 KAFKA_BOOTSTRAP_SERVERS=localhost:9092
-JWT_SECRET_KEY=opspulse-secure-jwt-secret-key-32bytes
+JWT_SECRET_KEY=<unique-secret-at-least-32-characters>
 ```
 
-### 3. Run Test Suite
+Generate a suitable JWT secret with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+Start Kafka and Qdrant before enabling their integrations. The dashboard can
+still be explored in demo mode without those services; live upload/triage
+requires the API and its configured model/vector dependencies.
+
+### 3. Launch the API and interactive Streamlit dashboard
+
+In two terminals from the project root:
+
+```bash
+# Terminal 1: API
+uvicorn src.api.app:app --reload --host 0.0.0.0 --port 8000
+
+# Terminal 2: interactive SRE dashboard
+streamlit run streamlit_app.py
+```
+
+Open the Streamlit URL printed in the terminal (usually `http://localhost:8501`).
+Set **FastAPI Base URL** in the sidebar if the API runs on another host. The
+dashboard includes interactive Plotly charts, Kafka/DLQ inspection, outage
+scenarios, JWT/HITL action controls, drag-and-drop `.log` / `.txt` / `.md`
+ingestion, and a JSON triage view. `requirements.txt` contains only the lighter
+dashboard dependencies; use `requirements-full.txt` for the API and integrations.
+
+### 4. Run Test Suite
 
 ```powershell
 # Run the full 116-test suite

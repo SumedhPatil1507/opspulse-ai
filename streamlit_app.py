@@ -284,6 +284,7 @@ with st.sidebar:
     cluster_env = st.selectbox("Active Environment", ["production", "staging", "development"], index=0)
     kafka_server = st.text_input("Kafka Bootstrap Brokers", value="localhost:9092")
     kafka_consumer_group = st.text_input("Consumer Group", value="opspulse-telemetry-consumer")
+    api_base = st.text_input("FastAPI Base URL", value="http://localhost:8000").rstrip("/")
     auto_refresh = st.toggle("Live Telemetry Stream", value=True)
     refresh_rate = st.slider("Refresh Interval (s)", min_value=2, max_value=30, value=5)
     
@@ -301,84 +302,7 @@ with st.sidebar:
     """)
     
     st.markdown("---")
-    st.markdown("### 📁 File Upload")
-    st.markdown("Upload incident data or runbooks to integrate with the system.")
-    
-    upload_type = st.radio("Upload Type", ["Incident Data (JSON)", "Runbook (Markdown)"])
-    
-    if upload_type == "Incident Data (JSON)":
-        uploaded_file = st.file_uploader(
-            "Upload incident data (JSON)",
-            type=["json"],
-            help="Upload a JSON file containing incident data to ingest into the system."
-        )
-        
-        if uploaded_file is not None:
-            try:
-                data = json.load(uploaded_file)
-                st.success(f"✅ Successfully loaded {len(data) if isinstance(data, list) else 1} incidents")
-                with st.expander("View Incident Data"):
-                    st.json(data)
-                
-                if st.button("🚀 Ingest to FastAPI", type="primary"):
-                    # Use batch ingest endpoint
-                    api_url = "http://localhost:8000/api/v1/alerts/ingest/batch"
-                    
-                    with st.spinner("Ingesting incidents..."):
-                        try:
-                            # Re-upload the file
-                            uploaded_file.seek(0)
-                            files = {"file": (uploaded_file.name, uploaded_file, "application/json")}
-                            response = requests.post(api_url, files=files, timeout=10)
-                            
-                            if response.status_code == 202:
-                                result = response.json()
-                                st.success(f"✅ Successfully ingested {result['successful']}/{result['total']} incidents")
-                                if result['failed'] > 0:
-                                    st.warning(f"⚠️ {result['failed']} incidents failed to ingest")
-                                    with st.expander("View Failed Ingestions"):
-                                        st.json(result['details']['failed'])
-                            else:
-                                st.error(f"❌ Failed to ingest: {response.text}")
-                        except Exception as e:
-                            st.error(f"❌ Error during ingestion: {e}")
-            except Exception as e:
-                st.error(f"❌ Error parsing JSON file: {e}")
-    
-    else:  # Runbook upload
-        uploaded_file = st.file_uploader(
-            "Upload runbook (Markdown)",
-            type=["md", "markdown"],
-            help="Upload a Markdown runbook to add to the knowledge base."
-        )
-        
-        if uploaded_file is not None:
-            try:
-                content = uploaded_file.read().decode("utf-8")
-                st.success(f"✅ Successfully loaded runbook: {uploaded_file.name}")
-                with st.expander("View Runbook Content"):
-                    st.markdown(content)
-                
-                if st.button("📤 Upload to FastAPI", type="primary"):
-                    api_url = "http://localhost:8000/api/v1/runbooks/upload"
-                    
-                    with st.spinner("Uploading runbook..."):
-                        try:
-                            # Re-upload the file
-                            uploaded_file.seek(0)
-                            files = {"file": (uploaded_file.name, uploaded_file, "text/markdown")}
-                            response = requests.post(api_url, files=files, timeout=10)
-                            
-                            if response.status_code == 201:
-                                result = response.json()
-                                st.success(f"✅ Runbook uploaded successfully to {result['path']}")
-                                st.info("📝 Runbook will be indexed automatically on next restart")
-                            else:
-                                st.error(f"❌ Failed to upload: {response.text}")
-                        except Exception as e:
-                            st.error(f"❌ Error during upload: {e}")
-            except Exception as e:
-                st.error(f"❌ Error processing file: {e}")
+    st.caption("Log and runbook uploads are available in the AI Triage tab.")
 
 # ── Main Dashboard Tabs ──────────────────────────────────────────────────────
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -753,7 +677,6 @@ with tab5:
         "`verdict` → `reasoning` → `recommendation` → `next_steps`."
     )
 
-    api_base = "http://localhost:8000"
     up_col1, up_col2 = st.columns([1, 1])
 
     with up_col1:

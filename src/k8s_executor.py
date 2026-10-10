@@ -323,6 +323,11 @@ def generate_jwt_token(
         roles = [REQUIRED_SRE_ROLE]
     if secret is None:
         secret = get_settings().JWT_SECRET_KEY
+    if not secret or len(secret) < 32:
+        raise UnauthorizedActionError(
+            "JWT signing is not configured: set JWT_SECRET_KEY to a secret "
+            "containing at least 32 characters."
+        )
 
     now = int(time.time())
     payload: dict[str, Any] = {
@@ -368,6 +373,11 @@ def verify_jwt_token(
 
     if secret is None:
         secret = get_settings().JWT_SECRET_KEY
+    if not secret or len(secret) < 32:
+        raise UnauthorizedActionError(
+            "JWT verification is not configured: set JWT_SECRET_KEY to a secret "
+            "containing at least 32 characters."
+        )
 
     payload: dict[str, Any]
 

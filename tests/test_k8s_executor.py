@@ -153,6 +153,13 @@ class TestJWTVerification:
         with pytest.raises(UnauthorizedActionError):
             verify_jwt_token("", secret=TEST_JWT_SECRET)
 
+    def test_missing_or_weak_signing_secret_fails_closed(self) -> None:
+        with pytest.raises(UnauthorizedActionError, match="at least 32 characters"):
+            verify_jwt_token("anything", secret="short-secret")
+
+        with pytest.raises(UnauthorizedActionError, match="at least 32 characters"):
+            generate_jwt_token(secret="")
+
 
 # ---------------------------------------------------------------------------
 # Test Group 2: HITL Review Queue & Safety Gate Lifecycle

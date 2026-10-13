@@ -11,13 +11,15 @@
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Client_v30-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)](https://kubernetes.io)
 [![Qdrant](https://img.shields.io/badge/Qdrant-1.11-DC143C?style=for-the-badge&logo=qdrant&logoColor=white)](https://qdrant.tech)
 [![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-FF4B4B?style=for-the-badge&logo=streamlit&logoColor=white)](https://streamlit.io)
-[![Tests](https://img.shields.io/badge/Tests-116_Passed-34D399?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
+[![Test Suite](https://img.shields.io/badge/pytest-suite-34D399?style=for-the-badge&logo=pytest&logoColor=white)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-SumedhPatil1507-181717?style=for-the-badge&logo=github)](https://github.com/SumedhPatil1507/opspulse-ai)
 
 **OpsPulse AI** is a production-grade, agentic SRE incident response system that continuously streams cluster telemetry from Kafka, detects anomalous error spikes, retrieves relevant runbooks via hybrid RAG, plans remediations with LLMs, and safely executes Kubernetes cluster actions (`AppsV1Api`, `CoreV1Api`, `Helm`) behind Human-In-The-Loop (HITL) and cryptographic JWT authorization gates.
 
-[**Live Dashboard**](#-interactive-streamlit-command-center) · [**Quick Start**](#-quick-start) · [**Architecture**](#-architecture) · [**Kubernetes Action Engine**](#-kubernetes-hitl-action-engine) · [**Kafka Streaming & DLQ**](#-real-time-kafka-event-streaming) · [**Benchmark Suite**](#-10-benchmark-kubernetes-chaos-scenarios)
+[**Live Dashboard**](#-interactive-streamlit-command-center) · [**Quick Start**](#-quick-start) · [**Architecture**](#architecture) · [**Kubernetes Action Engine**](#-kubernetes-hitl-action-engine) · [**Kafka Streaming & DLQ**](#-real-time-kafka-event-streaming) · [**Benchmark Suite**](#-10-benchmark-kubernetes-chaos-scenarios)
+
+<a href="#-interactive-streamlit-command-center">Open the dashboard guide ↓</a> · <a href="#-quick-start">Run locally</a> · <a href="#-architecture">Explore the pipeline</a>
 
 > 📦 **Repository:** https://github.com/SumedhPatil1507/opspulse-ai
 
@@ -27,55 +29,62 @@
 
 ## ✨ Key Capabilities
 
-|| Subsystem | Enterprise Capability |
-||---|---|
-|| 📡 **Real-time Kafka Streaming** | Continuous consumer for `k8s.pod.logs` & `k8s.system.alerts` with manual offset commit (`enable.auto.commit=False`) and Dead Letter Queue (`k8s.telemetry.dlq`) poison-pill quarantine. |
-|| 📈 **Sliding-Window Spike Detector** | Stateful sliding-window error frequency tracker triggering diagnostic agents upon exceeding error burst thresholds. |
-|| 🔍 **Hybrid RAG Retrieval** | Dense (`all-MiniLM-L6-v2`) + Sparse BM25 retrieval over Markdown runbooks with Cross-Encoder re-ranking (`ms-marco-MiniLM-L-6-v2`). |
-|| 🧠 **LangGraph Multi-Agent RCA** | 7-node state machine: `ParseLogNode` → `RetrieveRunbookNode` → `PlanRemediationNode` → `HITLCheckNode` → `AutoExecute / AwaitApproval` → `ExecuteActionNode` (JWT-gated). |
-|| 🛡️ **Kubernetes Action Engine** | Native `AppsV1Api` & `CoreV1Api` remediation executor: `restart_deployment()`, `scale_deployment()`, `rollback_helm_release()`, and read-only `fetch_pod_logs()`. |
-|| 🔐 **Dual Safety Gates** | Enforces cryptographically verified JWT tokens signed with `ROLE_SRE_ADMIN` and explicit, non-replayable `approval_id` from the HITL Review Queue. |
-|| 🧪 **Chaos Benchmark Suite** | 10 realistic Kubernetes cluster incident scenarios (`INC-001` to `INC-010`) with automated diagnostic evaluation scorecard. |
-|| 📊 **Interactive Streamlit Cockpit** | Live SRE operations cockpit with real-time telemetry charts, chaos scenario simulator, HITL review queue manager, and DLQ inspector. |
+| Subsystem | Capability |
+|---|---|
+| 📡 **Kafka streaming** | Manual offset commits, LangGraph triage, and poison-message quarantine in `k8s.telemetry.dlq`. |
+| 🧠 **Explainable RCA** | LangGraph workflows with hybrid dense + BM25 runbook search and risk-rated recommendations. |
+| 🛡️ **Kubernetes actions** | Official `kubernetes.client` APIs for restarts, scaling, route shifts, rollback, and log retrieval. |
+| 🔐 **Safety gates** | `ROLE_SRE_ADMIN` JWT validation, HITL approval, anti-replay, and Saga compensation. |
+| 🐝 **Kernel telemetry** | BCC eBPF probes publish syscall and socket-drop events to Kafka. |
+| 📊 **Interactive cockpit** | Streamlit dashboards with Plotly hover, zoom, pan, and modebar controls. |
+| 🧪 **Chaos simulation** | Ten Kubernetes outage scenarios stream to Kafka for end-to-end exercises. |
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
-```
-                          ┌─────────────────────────────────────────────────────────────┐
-                          │                        OpsPulse AI                          │
-                          │                                                             │
-  Telemetry Stream        │   Kafka Ingestion Pipeline      LangGraph State Machine     │
-  ┌─────────────────┐     │  ┌────────────────────────┐    ┌─────────────────────────┐  │
-  │  k8s.pod.logs   │────►┼──│ KafkaTelemetryConsumer │    │  [START]                │  │
-  │  k8s.system.    │     │  │ (Manual Offset Commit) │    │      │                  │  │
-  │  alerts         │     │  └───────────┬────────────┘    │      ▼                  │  │
-  └─────────────────┘     │              │                 │  parse_log_node         │  │
-  File Upload             │              ▼                 │      │                  │  │
-  ┌─────────────────┐     │  ┌────────────────────────┐    │      ▼                  │  │
-  │POST /logs/upload│────►┼──│ Dead Letter Queue (DLQ)│    │  retrieve_runbook       │  │
-  │POST /triage     │     │  └────────────────────────┘    │  (Dense + Sparse RAG)   │  │
-  └─────────────────┘     │              │                 │      │                  │  │
-                          │              ▼                 │      ▼                  │  │
-  HTTP Alerts             │  ┌────────────────────────┐    │  plan_remediation       │  │
-  ┌─────────────────┐     │  │ ErrorSpikeTracker      │───►│  (Groq Llama-3 / Claude)│  │
-  │ POST /ingest    │────►┼──│ + SystemAlert triage   │    │      │                  │  │
-  └─────────────────┘     │  └────────────────────────┘    │      ▼                  │  │
-                          │                                │  hitl_check_node        │  │
-  Slack HITL Webhook      │   Kubernetes Action Engine     │  ┌───┴──────┐           │  │
-  ┌─────────────────┐     │  ┌────────────────────────┐    │  ▼          ▼           │  │
-  │ SRE Review      │◄────┼──│ JWT: ROLE_SRE_ADMIN    │◄───┤ auto_exec  await_       │  │
-  │ Interactive Btn │     │  │ HITL Review Queue      │    │ _node      approval     │  │
-  └─────────────────┘     │  │ AppsV1Api / CoreV1Api  │    │  │    └───┬────┘        │  │
-                          │  │ Helm Rollback          │    │  ▼ (JWT gate) ▼        │  │
-  Kubernetes Cluster      │  └───────────┬────────────┘    │  execute_action         │  │
-  ┌─────────────────┐     │              │                 │      │                 │  │
-  │ Pods / Deploys  │◄────┼──────────────┘                 │      ▼                 │  │
-  └─────────────────┘     └─────────────────────────────────│  [END / HOLD AWAIT JWT]│ │
-                                                            └─────────────────────────┘
-```
+```mermaid
+flowchart LR
+    subgraph Sources["Telemetry sources"]
+        K8s["Kubernetes logs and alerts"]
+        EBPF["Linux BCC eBPF sensor"]
+        Upload["Log upload and triage API"]
+    end
+    subgraph Stream["Event stream"]
+        Kafka[("Kafka")]
+        DLQ[("Telemetry DLQ")]
+    end
+    subgraph Analysis["Explainable incident analysis"]
+        Consume["Manual-commit consumer"]
+        Parse["Parse and classify"]
+        RAG["Hybrid runbook retrieval"]
+        Plan["Risk-rated plan"]
+        Report["Standard remediation JSON"]
+    end
+    subgraph Guarded["Guarded execution"]
+        Slack["Slack Block Kit approval"]
+        JWT["ROLE_SRE_ADMIN JWT"]
+        Saga["Saga transaction"]
+        KubeAPI["Kubernetes client APIs"]
+    end
+    K8s --> Kafka
+    EBPF --> Kafka
+    Kafka --> Consume
+    Consume -->|"bad payload"| DLQ
+    Consume --> Parse --> RAG --> Plan
+    Plan --> Report
+    Plan --> Slack --> JWT --> Saga --> KubeAPI
+    Upload --> Parse
 
+    classDef source fill:#172554,stroke:#60a5fa,color:#eff6ff
+    classDef stream fill:#3b0764,stroke:#c084fc,color:#faf5ff
+    classDef analysis fill:#064e3b,stroke:#34d399,color:#ecfdf5
+    classDef guard fill:#7f1d1d,stroke:#fb7185,color:#fff1f2
+    class K8s,EBPF,Upload source
+    class Kafka,DLQ stream
+    class Consume,Parse,RAG,Plan,Report analysis
+    class Slack,JWT,Saga,KubeAPI guard
+```
 ---
 
 ## 🛡️ Kubernetes HITL Action Engine
@@ -85,6 +94,8 @@ All cluster mutations are executed via [`src/k8s_executor.py`](src/k8s_executor.
 1. **Cryptographic JWT Gate**: Verifies JWT signature and checks for `ROLE_SRE_ADMIN` claim.
 2. **HITL Review Queue Gate**: Verifies that the action has an explicit `approval_id` in `APPROVED` status with matching action type and target resource.
 3. **Anti-Replay Protection**: Immediately transitions approval state to `EXECUTED` upon execution.
+
+High-risk, critical, and unknown-risk plans are sent as Slack Block Kit approval requests. They remain held if Slack is unavailable, and dispatch requires both an approved HITL request and a verified, unexpired `ROLE_SRE_ADMIN` JWT. The workflow and executor each validate the JWT before any Kubernetes API mutation.
 
 ```python
 from src.k8s_executor import (
@@ -111,11 +122,39 @@ The streaming consumer in [`src/streaming/kafka_consumer.py`](src/streaming/kafk
 * **Dead Letter Queue (`k8s.telemetry.dlq`)**: Corrupted JSON or schema validation failures are immediately quarantined into the DLQ topic with diagnostic metadata, keeping the consumer partition moving.
 * **Error Spike Detector**: Tracks error frequencies per service/pod over a sliding window (default: 5 errors in 60s) to automatically trigger the LangGraph RCA workflow; critical system alerts triage immediately without waiting for a spike.
 
+Offsets are committed synchronously only after LangGraph processing succeeds or the record has been synchronously published to `k8s.telemetry.dlq`.
+
+### Saga remediation and compensation
+
+[`src/agent/saga_orchestrator.py`](src/agent/saga_orchestrator.py) runs remediation steps as a Saga: completed steps are compensated in reverse order when a later step or rollback-state invariant fails. Scale actions capture the prior replica count, deployment restarts capture the prior pod-template annotations, pod restarts retain the pod manifest, and route shifts capture the Service selector. Compensation outcomes and transaction IDs are included in the workflow execution result and trace.
+
+The remediation operations `restart_pod` and `route_shift` use the same JWT and HITL approval gates as deployment restart and scaling. A pod restart is compensatable by recreating the captured pod manifest; Kubernetes controllers may also independently recreate controller-managed pods.
+
 Run it standalone:
 
 ```bash
 python -m src.streaming.kafka_consumer
 ```
+
+### Linux eBPF kernel telemetry
+
+[`src/telemetry/ebpf_sensor.py`](src/telemetry/ebpf_sensor.py) attaches BCC
+tracepoints for `sys_enter_connect`, `sys_enter_execve`, and `skb:kfree_skb`
+(including the kernel drop reason when the running kernel exposes it). Events
+are emitted as JSON to `k8s.ebpf.kernel.telemetry`.
+
+Run this sensor on a Linux node with BCC, kernel headers/toolchain, Kafka
+connectivity, and `confluent-kafka` installed. The process needs root or the
+kernel capabilities required to load BPF programs and open perf buffers. BCC
+is intentionally not installed by the dashboard requirements.
+
+```bash
+python -m src.telemetry.ebpf_sensor --bootstrap-servers localhost:9092
+```
+
+The event contains host, PID, UID, process name, syscall arguments, and (for
+execve) the executable filename. Connect's sockaddr is represented by its
+userspace pointer and length; the sensor does not dereference process memory.
 
 ---
 
@@ -172,18 +211,18 @@ curl -X POST http://localhost:8000/api/v1/triage \
 
 Located in [`incident-simulation/data/`](incident-simulation/data/) and streamable into Kafka via [`scripts/simulate_k8s_outages.py`](scripts/simulate_k8s_outages.py):
 
-|| ID | Scenario | Category | Target | Recommended Action |
-||---|---|---|---|---|
-|| **INC-001** | Cascading OOMKilled Memory Leak | `RESOURCE_EXHAUSTION` | `deployment/payment-processor` | Memory limit increase to 4Gi & rolling restart |
-|| **INC-002** | CrashLoopBackOff (Missing Secret) | `CONFIGURATION_ERROR` | `deployment/auth-service` | Inject `JWT_SIGNING_KEY` & rollout restart |
-|| **INC-003** | CoreDNS Resolution Timeout Storm | `NETWORK_INFRASTRUCTURE` | `deployment/coredns` | Scale CoreDNS replicas to 6 |
-|| **INC-004** | PersistentVolumeDiskFull (Write Stall) | `STORAGE_EXHAUSTION` | `statefulset/event-store-db` | Expand PVC storage to 100Gi |
-|| **INC-005** | CFS CPU Throttling (p99 Latency Spike) | `CPU_SATURATION` | `deployment/checkout-api` | Increase CPU limit to 1000m / request 500m |
-|| **INC-006** | Ingress TLS Certificate Expiry | `SECURITY_CERTIFICATE` | `ingress/api-gateway-ingress` | ACME cert renewal via `cmctl` |
-|| **INC-007** | Node NotReady (DiskPressure Eviction) | `NODE_DEGRADATION` | `node/gke-prod-pool-node-3b` | Cordon, drain, and prune rootfs logs |
-|| **INC-008** | HikariCP Connection Pool Starvation | `DATABASE_CONTENTION` | `deployment/order-service` | Scale connection pool size to 100 |
-|| **INC-009** | Istio Envoy Sidecar mTLS Handshake Error | `SERVICE_MESH` | `deployment/billing-service` | Flush SDS cert cache & rollout restart |
-|| **INC-010** | Flawed Readiness Probe (0/3 Available) | `DEPLOYMENT_MISCONFIG` | `deployment/notification-dispatcher` | Fix probe port to 8000 |
+| ID | Scenario | Category | Target | Recommended action |
+|---|---|---|---|---|
+| **INC-001** | Cascading OOMKilled memory leak | `RESOURCE_EXHAUSTION` | `deployment/payment-processor` | Raise memory limit and rolling restart |
+| **INC-002** | CrashLoopBackOff (missing Secret) | `CONFIGURATION_ERROR` | `deployment/auth-service` | Restore `JWT_SIGNING_KEY` and restart |
+| **INC-003** | CoreDNS resolution timeout storm | `NETWORK_INFRASTRUCTURE` | `deployment/coredns` | Scale CoreDNS replicas to 6 |
+| **INC-004** | PersistentVolume disk full | `STORAGE_EXHAUSTION` | `statefulset/event-store-db` | Expand PVC storage |
+| **INC-005** | CPU throttling and p99 latency spike | `CPU_SATURATION` | `deployment/checkout-api` | Adjust CPU requests and limits |
+| **INC-006** | Ingress TLS certificate expiry | `SECURITY_CERTIFICATE` | `ingress/api-gateway-ingress` | Renew the ACME certificate |
+| **INC-007** | Node NotReady with disk pressure | `NODE_DEGRADATION` | `node/gke-prod-pool-node-3b` | Inspect node pressure and recover capacity |
+| **INC-008** | HikariCP connection pool starvation | `DATABASE_CONTENTION` | `deployment/order-service` | Tune the connection pool |
+| **INC-009** | Istio mTLS handshake errors | `SERVICE_MESH` | `deployment/billing-service` | Refresh sidecar credentials and restart |
+| **INC-010** | Readiness probe misconfiguration | `DEPLOYMENT_MISCONFIG` | `deployment/notification-dispatcher` | Correct the probe port |
 
 ---
 

@@ -368,6 +368,13 @@ async def triage_alert(
         alert_payload["severity"] = payload["severity"]
     if payload.get("environment") in ("development", "staging", "production"):
         alert_payload["environment"] = payload["environment"]
+    # Preserve optional kernel observations for the explainable report; only
+    # accept structured JSON values so arbitrary objects cannot leak through.
+    ebpf_metrics = payload.get("ebpf_metrics")
+    if ebpf_metrics is None and isinstance(payload.get("metadata"), dict):
+        ebpf_metrics = payload["metadata"].get("ebpf_metrics")
+    if isinstance(ebpf_metrics, (dict, list)):
+        alert_payload["metadata"] = {"ebpf_metrics": ebpf_metrics}
 
     try:
         state = await asyncio.to_thread(triage_runner, alert_payload)

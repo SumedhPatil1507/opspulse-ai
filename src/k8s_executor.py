@@ -5,7 +5,9 @@ Provides automated, guarded remediation actions on Kubernetes clusters:
 1. restart_deployment(namespace, deployment_name, auth_token, approval_id)
 2. scale_deployment(namespace, deployment_name, count, auth_token, approval_id)
 3. rollback_helm_release(release_name, auth_token, approval_id, namespace, revision)
-4. fetch_pod_logs(namespace, pod_name, auth_token, tail_lines, container, previous)
+4. restart_pod(namespace, pod_name, auth_token, approval_id)
+5. route_shift(namespace, service_name, selector, auth_token, approval_id)
+6. fetch_pod_logs(namespace, pod_name, auth_token, tail_lines, container, previous)
 
 Security & Safety Architecture:
 -------------------------------
@@ -17,8 +19,9 @@ Security & Safety Architecture:
   EXECUTED and cannot be reused.
 * Granular Validation: Target deployment/release and action type are verified
   against the approval request to prevent cross-action authorization spoofing.
-* Non-Destructive Only: The executor deliberately exposes only rolling
-  restarts, scaling, rollbacks, and log reads — never deletions or drains.
+* Saga Compensation: Mutating actions capture prior state and expose a
+  compensator; pod restart uses an explicitly approved delete followed by
+  manifest recreation if a later Saga step fails.
 """
 
 from __future__ import annotations
@@ -549,6 +552,18 @@ class KubernetesExecutor:
         apps_v1, _ = self._ensure_k8s_clients()
         now_iso = datetime.now(timezone.utc).isoformat()
 
+        previous_annotations: dict[str, str] = {}
+        try:
+            current = apps_v1.read_namespaced_deployment(
+                name=deployment_name, namespace=namespace
+            )
+            template_metadata = getattr(getattr(getattr(current, "spec", None), "template", None), "metadata", None)
+            previous_annotations = dict(getattr(template_metadata, "annotations", None) or {})
+        except Exception as read_error:
+            raise K8sExecutionError(
+                f"Could not capture restart compensation state for {target}: {read_error}"
+            ) from read_error
+
         patch_body = {
             "spec": {
                 "template": {
@@ -575,6 +590,7 @@ class KubernetesExecutor:
                 "namespace": namespace,
                 "deployment": deployment_name,
                 "restarted_at": now_iso,
+                "previous_annotations": previous_annotations,
                 "approved_by": hitl_req.approved_by,
                 "approval_id": approval_id,
                 "generation": getattr(resp.metadata, "generation", None) if hasattr(resp, "metadata") else None,
@@ -633,6 +649,18 @@ class KubernetesExecutor:
 
         apps_v1, _ = self._ensure_k8s_clients()
 
+        previous_replicas = None
+        try:
+            if hasattr(apps_v1, "read_namespaced_deployment_scale"):
+                previous = apps_v1.read_namespaced_deployment_scale(
+                    name=deployment_name, namespace=namespace
+                )
+                previous_replicas = getattr(getattr(previous, "spec", None), "replicas", None)
+        except Exception as read_error:
+            raise K8sExecutionError(
+                f"Could not capture scale compensation state for {target}: {read_error}"
+            ) from read_error
+
         scale_patch = {
             "spec": {
                 "replicas": count,
@@ -659,6 +687,7 @@ class KubernetesExecutor:
                 "namespace": namespace,
                 "deployment": deployment_name,
                 "target_replicas": count,
+                "previous_replicas": previous_replicas,
                 "approved_by": hitl_req.approved_by,
                 "approval_id": approval_id,
             }
@@ -688,6 +717,114 @@ class KubernetesExecutor:
             error_msg = f"K8s API failed to scale deployment '{target}' to {count} replicas: {e}"
             logger.error(error_msg, exc_info=True)
             raise K8sExecutionError(error_msg) from e
+
+    def route_shift(
+        self,
+        namespace: str,
+        service_name: str,
+        selector: dict[str, str],
+        auth_token: str,
+        approval_id: str,
+    ) -> K8sActionResult:
+        """Shift Service traffic to a new selector, recording its prior selector."""
+        if not namespace or not service_name or not selector:
+            raise InvalidParameterError("namespace, service_name, and selector are required for route_shift")
+        action = "route_shift"
+        target = f"{namespace}/{service_name}"
+        claims, approval = self.verify_authorization(auth_token, approval_id, action, target)
+        _, core_v1 = self._ensure_k8s_clients()
+        try:
+            service = core_v1.read_namespaced_service(name=service_name, namespace=namespace)
+            prior_selector = dict(getattr(getattr(service, "spec", None), "selector", None) or {})
+            core_v1.patch_namespaced_service(
+                name=service_name,
+                namespace=namespace,
+                body={"spec": {"selector": selector}},
+            )
+            return K8sActionResult(
+                success=True, action=action, target=target, namespace=namespace,
+                approval_id=approval_id, executed_by=claims.get("sub", "unknown-sre"),
+                details={"service_name": service_name, "previous_selector": prior_selector,
+                         "target_selector": selector, "approved_by": approval.approved_by},
+            )
+        except Exception as exc:
+            raise K8sExecutionError(f"Could not shift route for {target}: {exc}") from exc
+
+    def restart_pod(
+        self, namespace: str, pod_name: str, auth_token: str, approval_id: str,
+    ) -> K8sActionResult:
+        """Restart a pod by deleting it and retain its manifest for compensation."""
+        if not namespace or not pod_name:
+            raise InvalidParameterError("namespace and pod_name are required for restart_pod")
+        action = "restart_pod"
+        target = f"{namespace}/{pod_name}"
+        claims, approval = self.verify_authorization(auth_token, approval_id, action, target)
+        _, core_v1 = self._ensure_k8s_clients()
+        try:
+            pod = core_v1.read_namespaced_pod(name=pod_name, namespace=namespace)
+            manifest = (
+                client.ApiClient().sanitize_for_serialization(pod)
+                if client is not None and not isinstance(pod, dict)
+                else pod
+            )
+            if isinstance(manifest, dict):
+                manifest.pop("status", None)
+                metadata = manifest.get("metadata") or {}
+                for server_field in ("uid", "resourceVersion", "creationTimestamp", "managedFields"):
+                    metadata.pop(server_field, None)
+            core_v1.delete_namespaced_pod(name=pod_name, namespace=namespace)
+            return K8sActionResult(
+                success=True, action=action, target=target, namespace=namespace,
+                approval_id=approval_id, executed_by=claims.get("sub", "unknown-sre"),
+                details={"pod_name": pod_name, "pod_manifest": manifest,
+                         "approved_by": approval.approved_by},
+            )
+        except Exception as exc:
+            raise K8sExecutionError(f"Could not restart pod {target}: {exc}") from exc
+
+    def compensate_action(
+        self, operation: str, action_result: dict[str, Any], auth_token: str,
+    ) -> dict[str, Any]:
+        """Restore captured pre-action state using the original JWT authorization."""
+        verify_jwt_token(auth_token, secret=self._jwt_secret, required_role=REQUIRED_SRE_ROLE)
+        details = action_result.get("details") or {}
+        namespace = action_result.get("namespace") or details.get("namespace") or "default"
+        if operation == "scale_deployment":
+            old_count = details.get("previous_replicas")
+            if old_count is None:
+                raise K8sExecutionError("Cannot compensate scale: prior replica count was not captured")
+            apps_v1, _ = self._ensure_k8s_clients()
+            body = {"spec": {"replicas": int(old_count)}}
+            method = getattr(apps_v1, "patch_namespaced_deployment_scale", None)
+            if method:
+                method(name=details["deployment"], namespace=namespace, body=body)
+            else:
+                apps_v1.patch_namespaced_deployment(name=details["deployment"], namespace=namespace, body=body)
+            return {"action": "restore_replicas", "replicas": int(old_count)}
+        if operation == "route_shift":
+            _, core_v1 = self._ensure_k8s_clients()
+            core_v1.patch_namespaced_service(
+                name=details["service_name"], namespace=namespace,
+                body={"spec": {"selector": details.get("previous_selector") or {}}},
+            )
+            return {"action": "restore_service_selector", "selector": details.get("previous_selector") or {}}
+        if operation == "restart_pod":
+            _, core_v1 = self._ensure_k8s_clients()
+            manifest = details.get("pod_manifest")
+            if not manifest:
+                raise K8sExecutionError("Cannot compensate pod restart: prior pod manifest was not captured")
+            core_v1.create_namespaced_pod(namespace=namespace, body=manifest)
+            return {"action": "recreate_pod", "pod_name": details.get("pod_name")}
+        if operation == "restart_deployment":
+            apps_v1, _ = self._ensure_k8s_clients()
+            apps_v1.patch_namespaced_deployment(
+                name=details["deployment"], namespace=namespace,
+                body={"spec": {"template": {"metadata": {
+                    "annotations": details.get("previous_annotations") or {},
+                }}}},
+            )
+            return {"action": "restore_pod_template_annotations", "deployment": details["deployment"]}
+        raise K8sExecutionError(f"No compensation is defined for operation '{operation}'")
 
     def rollback_helm_release(
         self,

@@ -137,6 +137,37 @@ def _match_stack_lines(raw_log: str, limit: int = 2) -> str:
     return " | ".join(lines[:limit])[:400] or "n/a"
 
 
+def _format_ebpf_metrics(state: dict[str, Any], alert: dict[str, Any]) -> str:
+    """Summarize supplied eBPF socket-drop metrics without inferring absence."""
+    metadata = alert.get("metadata") or {}
+    telemetry = (
+        state.get("ebpf_metrics")
+        or state.get("kernel_telemetry")
+        or metadata.get("ebpf_metrics")
+        or metadata.get("kernel_telemetry")
+    )
+    if telemetry is None:
+        return "eBPF kernel socket drop metrics were not attached to this triage"
+
+    if isinstance(telemetry, dict):
+        drops = telemetry.get("socket_drops", telemetry.get("drop_count"))
+        if drops is not None:
+            return f"eBPF kernel socket drop metrics reported {drops} drop(s)"
+        event_type = telemetry.get("event_type")
+        if event_type in {"socket_drop", "kfree_skb"}:
+            return "eBPF kernel socket drop event matched"
+        return "eBPF kernel telemetry was attached; no socket-drop count was supplied"
+
+    if isinstance(telemetry, list):
+        drop_count = sum(
+            1 for event in telemetry
+            if isinstance(event, dict)
+            and event.get("event_type") in {"socket_drop", "kfree_skb"}
+        )
+        return f"eBPF kernel socket drop metrics matched {drop_count} event(s)"
+    return "eBPF kernel telemetry was attached; socket-drop metrics were unavailable"
+
+
 def build_remediation_report(state: dict[str, Any]) -> RemediationReport:
     """
     Build the standardized explainable remediation JSON from an
@@ -176,6 +207,7 @@ def build_remediation_report(state: dict[str, Any]) -> RemediationReport:
     stack_lines = _match_stack_lines(raw_log)
     runbook_scores = _format_runbook_scores(retrieved)
     reasoning = (
+        f"{_format_ebpf_metrics(state, alert)}. "
         f"Primary exception '{primary_exc}' on service '{service}'. "
         f"Matched stack trace line(s): {stack_lines}. "
         f"Runbook similarity: {runbook_scores}. "

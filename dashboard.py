@@ -28,6 +28,13 @@ import requests
 import streamlit as st
 from plotly.subplots import make_subplots
 
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "scrollZoom": True,
+    "responsive": True,
+}
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="OpsPulse AI",
@@ -35,8 +42,8 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
     menu_items={
-        "Get Help": "https://github.com/sanjeevrpatil11-gif/opspulse-ai",
-        "Report a bug": "https://github.com/sanjeevrpatil11-gif/opspulse-ai/issues",
+        "Get Help": "https://github.com/SumedhPatil1507/opspulse-ai",
+        "Report a bug": "https://github.com/SumedhPatil1507/opspulse-ai/issues",
         "About": "OpsPulse AI — Autonomous Incident Remediation Platform",
     },
 )
@@ -538,7 +545,7 @@ with col_left:
         height=320, margin=dict(l=0, r=0, t=40, b=0),
     )
     fig_timeline.update_traces(hovertemplate="%{y} incidents<extra>%{fullData.name}</extra>")
-    st.plotly_chart(fig_timeline, use_container_width=True)
+    st.plotly_chart(fig_timeline, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col_right:
     status_counts = df["status"].value_counts().reset_index()
@@ -559,7 +566,7 @@ with col_right:
         textposition="inside", textinfo="percent+label",
         hovertemplate="%{label}: %{value} (%{percent})<extra></extra>",
     )
-    st.plotly_chart(fig_donut, use_container_width=True)
+    st.plotly_chart(fig_donut, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Row 2 — Agent execution latency histogram + Risk tier heatmap
@@ -595,7 +602,7 @@ with col_hist:
         margin=dict(l=0, r=0, t=40, b=0),
         legend_title_text="Environment",
     )
-    st.plotly_chart(fig_lat, use_container_width=True)
+    st.plotly_chart(fig_lat, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col_heat:
     # Risk tier × severity heatmap
@@ -623,7 +630,7 @@ with col_heat:
     fig_heat.update_traces(
         hovertemplate="Risk: %{y}<br>Severity: %{x}<br>Count: %{z}<extra></extra>"
     )
-    st.plotly_chart(fig_heat, use_container_width=True)
+    st.plotly_chart(fig_heat, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Row 3 — Service breakdown + HITL funnel
@@ -665,7 +672,7 @@ with col_svc:
         font_color="#c0c0e0", height=340,
         margin=dict(l=0, r=0, t=40, b=0),
     )
-    st.plotly_chart(fig_svc, use_container_width=True)
+    st.plotly_chart(fig_svc, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col_hitl:
     # HITL approval funnel
@@ -690,7 +697,7 @@ with col_hitl:
         paper_bgcolor="rgba(0,0,0,0)", font_color="#c0c0e0",
         height=340, margin=dict(l=0, r=0, t=40, b=0),
     )
-    st.plotly_chart(fig_funnel, use_container_width=True)
+    st.plotly_chart(fig_funnel, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Row 4 — LLM call metrics + Docker sandbox ops
@@ -733,7 +740,7 @@ with col_llm:
         showlegend=True, legend_title_text="Provider",
     )
     fig_llm.update_xaxes(title_text="Latency (s)", row=1, col=2)
-    st.plotly_chart(fig_llm, use_container_width=True)
+    st.plotly_chart(fig_llm, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col_docker:
     fig_docker = make_subplots(
@@ -767,7 +774,7 @@ with col_docker:
     )
     fig_docker.update_yaxes(title_text="Count", row=1, col=1)
     fig_docker.update_yaxes(title_text="ms", row=1, col=2)
-    st.plotly_chart(fig_docker, use_container_width=True)
+    st.plotly_chart(fig_docker, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Row 5 — Severity trend line + Scatter (latency vs severity)
@@ -799,7 +806,7 @@ with col_trend:
     fig_trend.update_traces(
         hovertemplate="%{x|%H:%M}<br>%{y} incidents<extra>%{fullData.name}</extra>"
     )
-    st.plotly_chart(fig_trend, use_container_width=True)
+    st.plotly_chart(fig_trend, use_container_width=True, config=PLOTLY_CONFIG)
 
 with col_scatter:
     fig_scatter = px.scatter(
@@ -817,7 +824,7 @@ with col_scatter:
         margin=dict(l=0, r=0, t=40, b=0),
         xaxis_title="Duration (s)", yaxis_title="",
     )
-    st.plotly_chart(fig_scatter, use_container_width=True)
+    st.plotly_chart(fig_scatter, use_container_width=True, config=PLOTLY_CONFIG)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Row 6 — Recent incidents table

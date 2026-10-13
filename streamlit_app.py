@@ -27,6 +27,13 @@ import requests
 import streamlit as st
 from plotly.subplots import make_subplots
 
+PLOTLY_CONFIG = {
+    "displayModeBar": True,
+    "displaylogo": False,
+    "scrollZoom": True,
+    "responsive": True,
+}
+
 # ── Page config ───────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="OpsPulse AI — Autonomous SRE Command Center",
@@ -443,7 +450,7 @@ with tab1:
             xaxis=dict(gridcolor="#1e2242"),
             yaxis=dict(gridcolor="#1e2242"),
         )
-        st.plotly_chart(fig_ts, use_container_width=True)
+        st.plotly_chart(fig_ts, use_container_width=True, config=PLOTLY_CONFIG)
 
     with c_right:
         st.markdown("#### 🎯 Incident Category Breakdown")
@@ -462,7 +469,7 @@ with tab1:
             height=300,
             showlegend=False,
         )
-        st.plotly_chart(fig_donut, use_container_width=True)
+        st.plotly_chart(fig_donut, use_container_width=True, config=PLOTLY_CONFIG)
 
 
 # =============================================================================
@@ -821,7 +828,7 @@ with tab5:
             template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(13,13,31,0.6)", height=380, showlegend=False,
         )
-        st.plotly_chart(fig_hist, use_container_width=True)
+        st.plotly_chart(fig_hist, use_container_width=True, config=PLOTLY_CONFIG)
 
         verdict_counts = hist_df["verdict"].value_counts().reset_index()
         verdict_counts.columns = ["verdict", "count"]
@@ -835,4 +842,4 @@ with tab5:
             template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(13,13,31,0.6)", height=320,
         )
-        st.plotly_chart(fig_verdict, use_container_width=True)
+        st.plotly_chart(fig_verdict, use_container_width=True, config=PLOTLY_CONFIG)

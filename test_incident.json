@@ -1,0 +1,18 @@
+[
+  {
+    "alert_id": "test-001",
+    "service_name": "payment-service",
+    "severity": "high",
+    "environment": "production",
+    "timestamp": "2026-10-09T10:00:00Z",
+    "raw_log_stacktrace": "Traceback (most recent call last):\n  File 'app.py', line 42\nKubernetesError: Pod payment-service-7f8b9 is in CrashLoopBackOff state"
+  },
+  {
+    "alert_id": "test-002",
+    "service_name": "order-service",
+    "severity": "medium",
+    "environment": "staging",
+    "timestamp": "2026-10-09T10:05:00Z",
+    "raw_log_stacktrace": "WARNING: High memory usage detected: 92% on pod order-service-3d2e5"
+  }
+]

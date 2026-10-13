@@ -138,6 +138,13 @@ class TestRemediationReportSchema:
         assert "oom_killed_pod" in report.reasoning
         assert "Matched stack trace line" in report.reasoning
 
+    def test_reasoning_includes_ebpf_socket_drop_metrics_when_supplied(self) -> None:
+        state = fake_triage_runner({"raw_log_stacktrace": OOM_STACKTRACE})
+        state["ebpf_metrics"] = {"socket_drops": 7}
+        report = build_remediation_report(state)
+        assert "eBPF kernel socket drop metrics reported 7" in report.reasoning
+        assert "rerank_score=" in report.reasoning
+
     def test_recommendation_is_risk_rated(self) -> None:
         report = build_remediation_report(
             fake_triage_runner({"raw_log_stacktrace": OOM_STACKTRACE})
@@ -202,6 +209,17 @@ class TestTriageEndpoint:
         }
         assert isinstance(body["next_steps"], list)
         assert all(isinstance(s, str) for s in body["next_steps"])
+
+    async def test_triage_reports_supplied_ebpf_socket_drops(self, client) -> None:
+        response = await client.post(
+            "/api/v1/triage",
+            json={
+                "raw_log_stacktrace": OOM_STACKTRACE,
+                "ebpf_metrics": {"socket_drops": 4},
+            },
+        )
+        assert response.status_code == 200
+        assert "socket drop metrics reported 4" in response.json()["reasoning"]
 
     async def test_triage_missing_stacktrace_is_422(self, client) -> None:
         ac = client

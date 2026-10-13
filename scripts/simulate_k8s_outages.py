@@ -182,10 +182,15 @@ class DryRunProducer:
     def __init__(self) -> None:
         self.count = 0
 
-    def produce(self, topic: str, value: bytes, key: bytes | None = None) -> None:  # noqa: ARG002
+    def produce(
+        self, topic: str, value: bytes, key: bytes | None = None,
+        on_delivery: Any = None,
+    ) -> None:
         self.count += 1
         preview = value[:120].decode("utf-8", errors="replace")
         print(f"  [dry-run #{self.count}] {topic}: {preview}...")
+        if on_delivery:
+            on_delivery(None, None)
 
     def flush(self, timeout: float | None = None) -> int:  # noqa: ARG002
         return 0
@@ -231,6 +236,19 @@ def stream(
 ) -> int:
     """Produce records at ``rate`` messages/second. Returns produced count."""
     producer: Any = DryRunProducer() if dry_run else make_real_producer(bootstrap)
+    delivery_errors: list[str] = []
+
+    def on_delivery(error: Any, _message: Any) -> None:
+        if error is not None:
+            delivery_errors.append(str(error))
+
+    def flush_or_raise() -> None:
+        remaining = producer.flush(timeout=10.0)
+        if remaining:
+            raise RuntimeError(f"Kafka flush left {remaining} record(s) undelivered")
+        if delivery_errors:
+            raise RuntimeError(f"Kafka delivery failed: {delivery_errors[0]}")
+
     delay = 1.0 / rate if rate > 0 else 0.0
     total = len(records)
 
@@ -250,14 +268,17 @@ def stream(
             "simulation_total": total,
             "simulated_at": datetime.now(tz=timezone.utc).isoformat(),
         }
-        producer.produce(topic, value=json.dumps(payload).encode("utf-8"), key=key)
+        producer.produce(
+            topic, value=json.dumps(payload).encode("utf-8"), key=key,
+            on_delivery=on_delivery,
+        )
         if not dry_run and i % 100 == 0:
-            producer.flush(timeout=10.0)
+            flush_or_raise()
         if delay:
             time.sleep(delay)
 
     if not dry_run:
-        producer.flush(timeout=10.0)
+        flush_or_raise()
     return total
 
 

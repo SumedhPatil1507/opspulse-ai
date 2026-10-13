@@ -135,10 +135,10 @@ def _route_after_hitl(
 
     Routing table
     -------------
-    ApprovalStatus.NOT_REQUIRED  → auto_execute  (LOW / MEDIUM risk)
-    ApprovalStatus.SKIPPED       → auto_execute  (Slack not configured)
+    ApprovalStatus.NOT_REQUIRED  → auto_execute (LOW / MEDIUM risk)
     ApprovalStatus.PENDING       → await_approval (Slack notified, hold)
-    ApprovalStatus.APPROVED      → auto_execute  (human approved in Slack)
+    ApprovalStatus.SKIPPED       → await_approval (fail closed)
+    ApprovalStatus.APPROVED      → await_approval (still require JWT)
     ApprovalStatus.REJECTED      → END            (human rejected)
     None / unknown               → await_approval (fail-safe hold)
     WorkflowStatus.FAILED        → END
@@ -152,9 +152,13 @@ def _route_after_hitl(
         )
         return END
 
-    if approval in (ApprovalStatus.NOT_REQUIRED, ApprovalStatus.SKIPPED, ApprovalStatus.APPROVED):
+    if approval == ApprovalStatus.NOT_REQUIRED:
         logger.info("[router] hitl_check → auto_execute (approval=%s)", approval)
         return NodeName.AUTO_EXECUTE.value
+
+    if approval in (ApprovalStatus.PENDING, ApprovalStatus.SKIPPED, ApprovalStatus.APPROVED):
+        logger.info("[router] hitl_check → await_approval (approval=%s)", approval)
+        return NodeName.AWAIT_APPROVAL.value
 
     if approval == ApprovalStatus.REJECTED:
         logger.info("[router] hitl_check → END (REJECTED by human)")
@@ -181,9 +185,9 @@ def _route_after_await(
     approval = state.get("approval_status")
     auth_token = state.get("auth_token")
 
-    if approval == ApprovalStatus.APPROVED and auth_token:
+    if approval == ApprovalStatus.APPROVED and auth_token and _has_sre_jwt(auth_token):
         logger.info(
-            "[router] await_approval → execute_action (approval=APPROVED, jwt=present)"
+            "[router] await_approval → execute_action (approval=APPROVED, ROLE_SRE_ADMIN JWT verified)"
         )
         return NodeName.EXECUTE_ACTION.value
 
@@ -195,6 +199,20 @@ def _route_after_await(
     return END
 
 
+def _has_sre_jwt(token: str | None) -> bool:
+    """Validate signature, expiry, and ROLE_SRE_ADMIN before executor routing."""
+    if not token:
+        return False
+    try:
+        from src.k8s_executor import verify_jwt_token
+
+        verify_jwt_token(token)
+        return True
+    except Exception as exc:
+        logger.warning("[router] holding action: JWT validation failed: %s", exc)
+        return False
+
+
 def _route_after_auto(
     state: IncidentState,
 ) -> Literal["execute_action", "__end__"]:
@@ -204,6 +222,9 @@ def _route_after_auto(
     """
     if state.get("workflow_status") == WorkflowStatus.AWAITING_HUMAN:
         logger.info("[router] auto_execute → END (awaiting JWT authorization)")
+        return END
+    if not _has_sre_jwt(state.get("auth_token")):
+        logger.info("[router] auto_execute → END (ROLE_SRE_ADMIN JWT not verified)")
         return END
     return NodeName.EXECUTE_ACTION.value
 

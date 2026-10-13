@@ -350,12 +350,24 @@ class KafkaTelemetryConsumer:
             raw_payload=raw_payload[:16384],
         )
         producer = self._get_producer()
+        delivery_error: list[Any] = []
+
+        def on_delivery(error: Any, _message: Any) -> None:
+            if error is not None:
+                delivery_error.append(error)
+
         producer.produce(
             topic=self.dlq_topic,
             key=(key or f"{partition}-{offset}").encode("utf-8"),
             value=envelope.model_dump_json().encode("utf-8"),
+            on_delivery=on_delivery,
         )
-        producer.flush(timeout=10.0)
+        remaining = producer.flush(timeout=10.0)
+        if (isinstance(remaining, int) and remaining > 0) or delivery_error:
+            raise RuntimeError(
+                f"DLQ publish did not complete; pending={remaining}, "
+                f"delivery_error={delivery_error[0] if delivery_error else None}"
+            )
         self.stats["dlq"] += 1
         logger.warning(
             "Routed failed record to DLQ topic=%s partition=%s offset=%s error_type=%s: %s",
@@ -420,10 +432,18 @@ class KafkaTelemetryConsumer:
         state = initial_state(alert_payload_dict)
 
         if self._workflow_invoker is not None:
-            return self._workflow_invoker(state)
+            result = self._workflow_invoker(state)
+        else:
+            app = self._get_workflow_app()
+            result = app.invoke(state)
 
-        app = self._get_workflow_app()
-        return app.invoke(state)
+        workflow_status = result.get("workflow_status") if isinstance(result, dict) else None
+        if str(getattr(workflow_status, "value", workflow_status)).upper() == "FAILED":
+            raise RuntimeError(
+                "LangGraph RCA completed with FAILED status: "
+                f"{result.get('error_message') or 'no error detail'}"
+            )
+        return result
 
     # -----------------------------------------------------------------------
     # Single Message Processing Pipeline

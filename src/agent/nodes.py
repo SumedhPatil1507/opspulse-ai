@@ -707,7 +707,37 @@ def hitl_check_node(state: IncidentState) -> dict[str, Any]:
 
     risk_tier: str = str(proposed.get("risk_tier", RiskTier.UNKNOWN.value)).upper()
     hitl_tiers: list[str] = [t.upper() for t in cfg.HITL_RISK_TIERS]
-    requires_hitl: bool = risk_tier in hitl_tiers
+    # Only explicitly LOW/MEDIUM actions may skip review. Unknown or future
+    # tiers fail closed to HITL even if configuration is incomplete.
+    requires_hitl: bool = (
+        risk_tier in hitl_tiers or risk_tier not in {RiskTier.LOW.value, RiskTier.MEDIUM.value}
+    )
+
+    # A signed approval callback may re-invoke the workflow from its initial
+    # state. Preserve that decision so we do not post a duplicate Slack prompt
+    # or accidentally reset APPROVED back to PENDING.
+    prior_approval = state.get("approval_status")
+    if requires_hitl and prior_approval == ApprovalStatus.APPROVED:
+        return {
+            "approval_status": ApprovalStatus.APPROVED,
+            "workflow_status": WorkflowStatus.RUNNING,
+            "slack_notification_sent": state.get("slack_notification_sent", False),
+            "trace_log": traces + [make_trace_event(
+                node=node, event="approval_restored",
+                message="Previously approved high-risk action resumed; awaiting ROLE_SRE_ADMIN JWT gate",
+                metadata={"action_id": proposed.get("action_id")},
+            )],
+        }
+    if requires_hitl and prior_approval == ApprovalStatus.REJECTED:
+        return {
+            "approval_status": ApprovalStatus.REJECTED,
+            "workflow_status": WorkflowStatus.REJECTED,
+            "trace_log": traces + [make_trace_event(
+                node=node, event="approval_rejected",
+                message="Previously rejected high-risk action remains blocked",
+                metadata={"action_id": proposed.get("action_id")},
+            )],
+        }
 
     logger.info(
         "[%s] risk_tier=%s requires_hitl=%s action_id=%s",
@@ -858,6 +888,22 @@ def auto_execute_node(state: IncidentState) -> dict[str, Any]:
             )],
         }
 
+    try:
+        from src.k8s_executor import verify_jwt_token
+
+        claims = verify_jwt_token(auth_token)
+    except Exception as exc:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        hold_msg = f"JWT authorization is invalid or lacks ROLE_SRE_ADMIN: {exc}"
+        return {
+            "workflow_status": WorkflowStatus.AWAITING_HUMAN,
+            "error_message": hold_msg,
+            "trace_log": [make_trace_event(
+                node=node, event="awaiting_jwt", message=hold_msg,
+                duration_ms=duration_ms,
+            )],
+        }
+
     duration_ms = (time.monotonic() - t_start) * 1000
     return {
         "workflow_status": WorkflowStatus.RUNNING,
@@ -869,6 +915,7 @@ def auto_execute_node(state: IncidentState) -> dict[str, Any]:
             metadata={
                 "tool_name": proposed.get("tool_name"),
                 "action_id": proposed.get("action_id"),
+                "authorized_subject": claims.get("sub"),
             },
         )],
     }
@@ -916,6 +963,9 @@ _K8S_TOOL_MAP: dict[str, str] = {
     "scale_deployment": "scale_deployment",
     "scale_replicas": "scale_deployment",
     "scale": "scale_deployment",
+    "restart_pod": "restart_pod",
+    "route_shift": "route_shift",
+    "shift_route": "route_shift",
     "rollback_helm_release": "rollback_helm_release",
     "helm_rollback": "rollback_helm_release",
     "rollback": "rollback_helm_release",
@@ -1042,6 +1092,30 @@ def execute_action_node(state: IncidentState) -> dict[str, Any]:
             "trace_log": traces,
         }
 
+    cfg = get_settings()
+    risk_tier = str(proposed.get("risk_tier", RiskTier.UNKNOWN.value)).upper()
+    requires_slack_approval = (
+        risk_tier in {tier.upper() for tier in cfg.HITL_RISK_TIERS}
+        or risk_tier not in {RiskTier.LOW.value, RiskTier.MEDIUM.value}
+    )
+    if requires_slack_approval and (
+        state.get("approval_status") != ApprovalStatus.APPROVED
+        or not state.get("slack_notification_sent")
+    ):
+        message = "High-risk execution held until Slack notification and human approval are present."
+        traces.append(make_trace_event(
+            node=node, event="awaiting_approval", message=message,
+            metadata={
+                "approval_status": str(state.get("approval_status")),
+                "slack_notification_sent": bool(state.get("slack_notification_sent")),
+            },
+        ))
+        return {
+            "workflow_status": WorkflowStatus.AWAITING_HUMAN,
+            "error_message": message,
+            "trace_log": traces,
+        }
+
     executor = get_k8s_executor()
 
     # ── Gate 3 (mutating ops): an approved HITL approval_id is mandatory ───
@@ -1053,7 +1127,7 @@ def execute_action_node(state: IncidentState) -> dict[str, Any]:
         target = str(
             params.get("target")
             or f"{params.get('namespace', 'default')}/"
-               f"{params.get('deployment_name') or params.get('release_name') or 'unknown'}"
+               f"{params.get('deployment_name') or params.get('release_name') or params.get('service_name') or params.get('pod_name') or 'unknown'}"
         )
         request = queue.submit_for_review(
             action_type=operation,
@@ -1085,46 +1159,109 @@ def execute_action_node(state: IncidentState) -> dict[str, Any]:
         }
 
     # ── Dispatch through src/k8s_executor.py ───────────────────────────────
+    from src.agent.saga_orchestrator import SagaExecutionError, SagaOrchestrator, SagaStep
+
     namespace = str(params.get("namespace") or "default")
     try:
-        if operation == "restart_deployment":
-            result = executor.restart_deployment(
-                namespace=namespace,
-                deployment_name=str(
-                    params.get("deployment_name") or params.get("target") or ""
-                ),
-                approval_id=approval_id,
-                auth_token=auth_token,
-            )
-        elif operation == "scale_deployment":
-            result = executor.scale_deployment(
-                namespace=namespace,
-                deployment_name=str(
-                    params.get("deployment_name") or params.get("target") or ""
-                ),
-                count=int(params.get("replicas") or params.get("count") or 1),
-                approval_id=approval_id,
-                auth_token=auth_token,
-            )
-        elif operation == "rollback_helm_release":
-            revision = params.get("revision")
-            result = executor.rollback_helm_release(
-                release_name=str(
-                    params.get("release_name") or params.get("target") or ""
-                ),
-                namespace=namespace if namespace != "default" else None,
-                revision=int(revision) if revision is not None else None,
-                approval_id=approval_id,
-                auth_token=auth_token,
-            )
-        else:  # operation == "fetch_pod_logs"
-            result = executor.fetch_pod_logs(
+        def dispatch() -> Any:
+            if operation == "restart_deployment":
+                return executor.restart_deployment(
+                    namespace=namespace,
+                    deployment_name=str(params.get("deployment_name") or params.get("target") or ""),
+                    approval_id=approval_id, auth_token=auth_token,
+                )
+            if operation == "scale_deployment":
+                return executor.scale_deployment(
+                    namespace=namespace,
+                    deployment_name=str(params.get("deployment_name") or params.get("target") or ""),
+                    count=int(params.get("replicas") or params.get("count") or 1),
+                    approval_id=approval_id, auth_token=auth_token,
+                )
+            if operation == "rollback_helm_release":
+                revision = params.get("revision")
+                return executor.rollback_helm_release(
+                    release_name=str(params.get("release_name") or params.get("target") or ""),
+                    namespace=namespace if namespace != "default" else None,
+                    revision=int(revision) if revision is not None else None,
+                    approval_id=approval_id, auth_token=auth_token,
+                )
+            if operation == "route_shift":
+                return executor.route_shift(
+                    namespace=namespace,
+                    service_name=str(params.get("service_name") or params.get("target") or ""),
+                    selector=dict(params.get("selector") or {}),
+                    approval_id=approval_id, auth_token=auth_token,
+                )
+            if operation == "restart_pod":
+                return executor.restart_pod(
+                    namespace=namespace,
+                    pod_name=str(params.get("pod_name") or params.get("target") or ""),
+                    approval_id=approval_id, auth_token=auth_token,
+                )
+            return executor.fetch_pod_logs(
                 namespace=namespace,
                 pod_name=str(params.get("pod_name") or params.get("target") or ""),
-                tail_lines=int(params.get("tail_lines") or 200),
+                tail_lines=int(params.get("tail_lines") or 200), auth_token=auth_token,
+            )
+
+        def compensate(action_result: Any) -> Any:
+            return executor.compensate_action(
+                operation=operation,
+                action_result=_dataclass_to_dict(action_result),
                 auth_token=auth_token,
             )
 
+        action_holder: dict[str, Any] = {}
+
+        def run_action() -> Any:
+            action_result = dispatch()
+            action_holder["result"] = action_result
+            return action_result
+
+        def verify_rollback_ready() -> dict[str, bool]:
+            """Downstream invariant: the action has a captured undo state."""
+            action_result = _dataclass_to_dict(action_holder["result"])
+            details = action_result.get("details") or {}
+            snapshots = {
+                "restart_deployment": "previous_annotations" in details,
+                "scale_deployment": details.get("previous_replicas") is not None,
+                "restart_pod": bool(details.get("pod_manifest")),
+                "route_shift": "previous_selector" in details,
+            }
+            if operation in snapshots and not snapshots[operation]:
+                raise RuntimeError(f"No compensation snapshot captured for {operation}")
+            return {"success": True}
+
+        saga = SagaOrchestrator()
+        saga_result = saga.execute([
+            SagaStep(name=operation, action=run_action, compensate=compensate),
+            SagaStep(
+                name="verify_compensation_state",
+                action=verify_rollback_ready,
+                compensate=lambda _value: None,
+            ),
+        ])
+        result = saga_result.results[operation]
+
+    except SagaExecutionError as exc:
+        duration_ms = (time.monotonic() - t_start) * 1000
+        saga_audit = {
+            "transaction_id": exc.result.transaction_id,
+            "saga_status": exc.result.status,
+            "completed_steps": exc.result.completed_steps,
+            "compensations": exc.result.compensations,
+        }
+        err = f"SagaExecutionError: {exc}"
+        traces.append(make_trace_event(
+            node=node, event="saga_compensation", message=err,
+            duration_ms=duration_ms, metadata=saga_audit,
+        ))
+        return {
+            "workflow_status": WorkflowStatus.FAILED,
+            "error_message": err,
+            "execution_result": {"success": False, "error": err, **saga_audit},
+            "trace_log": traces,
+        }
     except (SecurityGateError, HITLApprovalRequiredError) as exc:
         duration_ms = (time.monotonic() - t_start) * 1000
         err = f"{exc.__class__.__name__}: {exc}"
@@ -1183,13 +1320,22 @@ def execute_action_node(state: IncidentState) -> dict[str, Any]:
             "operation": operation,
             "approval_id": approval_id,
             "executed_by": result_dict.get("executed_by") or result_dict.get("fetched_by"),
+            "saga_transaction_id": saga_result.transaction_id,
+            "saga_status": saga_result.status,
         },
     ))
 
     return {
         "workflow_status": WorkflowStatus.COMPLETED if success else WorkflowStatus.FAILED,
         "approval_status": ApprovalStatus.APPROVED if success else ApprovalStatus.PENDING,
-        "execution_result": result_dict,
+        "execution_result": {
+            **result_dict,
+            "saga": {
+                "transaction_id": saga_result.transaction_id,
+                "status": saga_result.status,
+                "completed_steps": saga_result.completed_steps,
+            },
+        },
         "error_message": None if success else str(result_dict.get("error") or "execution failed"),
         "trace_log": traces,
     }
